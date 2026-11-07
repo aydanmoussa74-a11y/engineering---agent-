@@ -87,7 +87,7 @@ function makeMcpServer() {
 
   server.registerTool("map_repository_architecture", {
     title: "Map repository architecture",
-    description: "Perform bounded, read-only static analysis of a GitHub repository. Summarizes languages, project manifests, declared frameworks, directory layout and likely entrypoints. Distinguishes observed, documented and inferred evidence. Does not execute code.",
+    description: "Perform bounded, read-only static analysis of a GitHub repository. Summarizes languages, project manifests, declared frameworks, directory layout, likely entrypoints and a bounded JavaScript/TypeScript import graph. Reports central modules, external package references and unresolved relative imports with explicit limitations. Distinguishes observed, documented and inferred evidence. Does not execute code.",
     inputSchema: {
       repository: z.string().min(1).max(500).describe("GitHub owner/name or HTTPS repository URL."),
       max_files: z.number().int().min(10).max(200).optional()
