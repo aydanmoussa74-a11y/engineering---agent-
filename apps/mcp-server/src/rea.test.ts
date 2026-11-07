@@ -84,7 +84,11 @@ describe("bounded JavaScript and TypeScript import graph", () => {
     expect(graph.externalPackages).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "react", referencedByCount: 1 })
     ]));
-    expect(graph.centralModules[0]?.path).toBe("src/core.ts");
+    expect(graph.centralModules[0]).toMatchObject({
+      path: "src/core.ts",
+      incomingReferences: 2,
+      scanned: false
+    });
   });
 
   it("keeps unresolved relative imports explicit and does not claim they are broken", () => {
