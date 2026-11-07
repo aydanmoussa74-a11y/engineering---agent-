@@ -37,8 +37,13 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       new URL("../migrations/002_skills_registry_and_execution.sql", import.meta.url),
       "utf8"
     );
+    const researchMigration = await readFile(
+      new URL("../migrations/003_evidence_research_workspace.sql", import.meta.url),
+      "utf8"
+    );
     await database.query(initialMigration);
     await database.query(workflowMigration);
+    await database.query(researchMigration);
 
     const portProbe = createNetServer();
     await new Promise<void>((resolve, reject) => {
@@ -169,7 +174,13 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         "create_engineering_task",
         "record_task_approval",
         "advance_engineering_task",
-        "get_engineering_task"
+        "get_engineering_task",
+        "create_research_brief",
+        "list_research_briefs",
+        "save_research_source",
+        "record_research_claim",
+        "update_research_synthesis",
+        "get_research_brief"
       ]));
 
       async function callTool(id: number, name: string, args: Record<string, unknown>) {
@@ -288,8 +299,74 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       expect(workflowData.task).toMatchObject({ status: "completed", attempt_count: 1, approval_state: "approved" });
       expect(workflowData.recent_events.map((event) => event.event_type)).toContain("state_transition");
 
+      const research = await callTool(20, "create_research_brief", {
+        project_id: "research-project",
+        title: "MCP integration research",
+        research_question: "What does the sample MCP endpoint expose?",
+        scope: { targets: ["tools"], excluded: ["runtime execution"] }
+      });
+      const researchBrief = JSON.parse(research.content[0].text) as { research_id: string; status: string };
+      expect(researchBrief.status).toBe("researching");
+
+      const source = await callTool(21, "save_research_source", {
+        research_id: researchBrief.research_id,
+        url: "https://docs.example.test/mcp/reference",
+        title: "MCP Reference",
+        publisher: "Example Documentation",
+        source_type: "api_reference",
+        authority_level: "official",
+        excerpt: "The endpoint exposes a bounded list of registered tools.",
+        notes: "Synthetic fixture for integration testing."
+      });
+      const sourceRecord = JSON.parse(source.content[0].text) as { source_id: string; content_sha256: string };
+      expect(sourceRecord.content_sha256).toMatch(/^[a-f0-9]{64}$/);
+
+      const unsupportedClaim = await callTool(22, "record_research_claim", {
+        research_id: researchBrief.research_id,
+        claim: "An unsupported documented statement.",
+        classification: "documented",
+        confidence: "high",
+        source_ids: []
+      });
+      expect(unsupportedClaim.isError).toBe(true);
+
+      await callTool(23, "record_research_claim", {
+        research_id: researchBrief.research_id,
+        claim: "The synthetic reference describes a bounded tool list.",
+        classification: "documented",
+        confidence: "high",
+        source_ids: [sourceRecord.source_id],
+        rationale: "Directly supported by the saved source excerpt."
+      });
+      const incompleteBrief = await callTool(24, "update_research_synthesis", {
+        research_id: researchBrief.research_id,
+        status: "completed",
+        synthesis: "This should not complete without the required evidence source and claim count."
+      });
+      expect(incompleteBrief.isError).toBe(false);
+
+      const savedSynthesis = await callTool(25, "update_research_synthesis", {
+        research_id: researchBrief.research_id,
+        status: "completed",
+        synthesis: "The research fixture contains one documented claim backed by one saved reference.",
+        limitations: ["Synthetic CI source; not evidence about a real service."],
+        unresolved_questions: ["No live endpoint was inspected."]
+      });
+      expect(JSON.parse(savedSynthesis.content[0].text).status).toBe("completed");
+      const fullResearch = await callTool(26, "get_research_brief", { research_id: researchBrief.research_id });
+      const fullResearchData = JSON.parse(fullResearch.content[0].text) as {
+        sources: Array<{ source_id: string }>;
+        claims: Array<{ classification: string }>;
+        brief: { status: string };
+      };
+      expect(fullResearchData).toMatchObject({
+        brief: { status: "completed" },
+        sources: [expect.objectContaining({ source_id: sourceRecord.source_id })],
+        claims: [expect.objectContaining({ classification: "documented" })]
+      });
+
       const projectId = "integration-project-" + randomUUID();
-      const savedMemory = await callTool(16, "save_project_memory", {
+      const savedMemory = await callTool(27, "save_project_memory", {
         project_id: projectId,
         kind: "architecture_decision",
         content: "Integration test verifies repository architecture memory persistence.",
@@ -298,7 +375,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(savedMemory?.isError).not.toBe(true);
 
-      const searchedMemory = await callTool(17, "search_project_memory", {
+      const searchedMemory = await callTool(28, "search_project_memory", {
         project_id: projectId,
         query: "repository architecture",
         limit: 5
@@ -312,14 +389,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       ]));
 
       const taskId = "integration-task-" + randomUUID();
-      await callTool(18, "save_task_checkpoint", {
+      await callTool(29, "save_task_checkpoint", {
         task_id: taskId,
         project_id: projectId,
         goal: "Verify remote MCP persistence",
         status: "verifying",
         checkpoint: "Memory and task tools are connected to the test database."
       });
-      const checkpoint = await callTool(19, "get_task_checkpoint", { task_id: taskId });
+      const checkpoint = await callTool(30, "get_task_checkpoint", { task_id: taskId });
       const checkpointData = JSON.parse(checkpoint.content[0].text) as {
         task: { task_id: string; status: string };
         recent_events: Array<{ status: string }>;
