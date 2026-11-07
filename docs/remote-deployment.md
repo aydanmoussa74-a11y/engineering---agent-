@@ -15,7 +15,8 @@ The Render filesystem is not used for durable state. Application traffic uses Ne
 - Health endpoint: `/health` (checks database connectivity).
 - MCP requests require an Authorization Bearer token.
 - Host header is checked against `PUBLIC_HOST`.
-- Per-IP request rate limiting and a bounded in-memory MCP session map protect the service.
+- Fixed-window request rate limiting applies to the authenticated bearer credential; it does not trust caller-supplied forwarding headers for identity.
+- MCP sessions are bounded and idle sessions are closed after 30 minutes.
 - The tenant scope is fixed by server-side `AGENT_TENANT_ID`; clients cannot select another tenant.
 - Repository inspection remains read-only. Shell execution, arbitrary commands, writes, package installation and deployment are not enabled.
 
