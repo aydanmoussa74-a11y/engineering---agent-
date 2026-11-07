@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Pool } from "pg";
 import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
 import { mapRepositoryArchitecture } from "./rea.js";
+import { createFixedWindowRateLimiter, isAllowedHost, isAuthorizedBearer } from "./security.js";
 
 
 const port = Number(process.env.PORT ?? 3000);
@@ -32,43 +33,30 @@ pool.on("error", () => {
 type Session = {
   server: McpServer;
   transport: StreamableHTTPServerTransport;
+  lastActivityAt: number;
 };
 const sessions = new Map<string, Session>();
 const MAX_SESSIONS = 50;
-const rateWindows = new Map<string, { startedAt: number; count: number }>();
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60_000;
+const rateLimit = createFixedWindowRateLimiter({ limit: 120, windowMs: 60_000, maxKeys: 1_000 });
+
+const sessionCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastActivityAt <= SESSION_IDLE_TIMEOUT_MS) continue;
+    sessions.delete(id);
+    void session.transport.close().catch(() => undefined);
+    void session.server.close().catch(() => undefined);
+  }
+}, 60_000);
+sessionCleanupTimer.unref();
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(JSON.stringify(body));
 }
 
-function authorized(req: IncomingMessage): boolean {
-  const value = req.headers.authorization;
-  if (typeof value !== "string" || !value.startsWith("Bearer ")) return false;
-  const supplied = Buffer.from(value.slice(7), "utf8");
-  const expected = Buffer.from(bearerToken, "utf8");
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
 
-function validHost(req: IncomingMessage): boolean {
-  const host = String(req.headers.host ?? "").toLowerCase();
-  if (publicHost) return host === publicHost;
-  return host === "localhost" || host.startsWith("127.0.0.1:") || host.endsWith(".onrender.com");
-}
-
-function withinRateLimit(req: IncomingMessage): boolean {
-  const forwarded = req.headers["x-forwarded-for"];
-  const ip = (typeof forwarded === "string" ? forwarded.split(",")[0] : req.socket.remoteAddress) ?? "unknown";
-  const now = Date.now();
-  const current = rateWindows.get(ip);
-  if (!current || now - current.startedAt >= 60_000) {
-    rateWindows.set(ip, { startedAt: now, count: 1 });
-    if (rateWindows.size > 10_000) rateWindows.clear();
-    return true;
-  }
-  current.count += 1;
-  return current.count <= 120;
-}
 
 async function verifySchema() {
   const result = await pool.query(
@@ -232,16 +220,16 @@ const httpServer = createServer(async (req, res) => {
     json(res, 404, { error: "Not found" });
     return;
   }
-  if (!validHost(req)) {
+  if (!isAllowedHost(req.headers.host, publicHost)) {
     json(res, 421, { error: "Misdirected request" });
     return;
   }
-  if (!authorized(req)) {
+  if (!isAuthorizedBearer(req.headers.authorization, bearerToken)) {
     res.setHeader("WWW-Authenticate", 'Bearer realm="engineering-agent"');
     json(res, 401, { error: "Unauthorized" });
     return;
   }
-  if (!withinRateLimit(req)) {
+  if (!rateLimit("shared-bearer")) {
     json(res, 429, { error: "Rate limit exceeded" });
     return;
   }
@@ -254,6 +242,7 @@ const httpServer = createServer(async (req, res) => {
       return;
     }
     try {
+      session.lastActivityAt = Date.now();
       await session.transport.handleRequest(req, res);
       if (req.method === "DELETE") sessions.delete(sessionId);
     } catch {
@@ -276,7 +265,7 @@ const httpServer = createServer(async (req, res) => {
   let transport!: StreamableHTTPServerTransport;
   transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
-    onsessioninitialized: (id) => { sessions.set(id, { server, transport }); }
+    onsessioninitialized: (id) => { sessions.set(id, { server, transport, lastActivityAt: Date.now() }); }
   });
   try {
     await server.connect(transport);
@@ -288,9 +277,11 @@ const httpServer = createServer(async (req, res) => {
 });
 
 async function shutdown() {
+  clearInterval(sessionCleanupTimer);
   httpServer.close();
   for (const session of sessions.values()) {
     try { await session.transport.close(); } catch { /* best-effort cleanup */ }
+    try { await session.server.close(); } catch { /* best-effort cleanup */ }
   }
   sessions.clear();
   await pool.end();
