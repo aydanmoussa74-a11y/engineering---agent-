@@ -54,7 +54,7 @@ describe("static repository architecture mapping", () => {
       name: null,
       dependencyCount: 0
     });
-    expect(report.entrypointCandidates[0].path).toBe("main.py");
+    expect(report.entrypointCandidates[0]?.path).toBe("main.py");
   });
 
   it("does not invent framework signals when no manifest declares one", () => {
