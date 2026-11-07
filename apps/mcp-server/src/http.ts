@@ -5,6 +5,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Pool } from "pg";
 import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
+import { mapRepositoryArchitecture } from "./rea.js";
+
 
 const port = Number(process.env.PORT ?? 3000);
 const bearerToken = process.env.MCP_BEARER_TOKEN ?? "";
@@ -92,6 +94,22 @@ function makeMcpServer() {
       return { content: [{ type: "text", text: JSON.stringify(snapshot, null, 2) }] };
     } catch (error) {
       return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Repository inspection failed." }] };
+    }
+  });
+
+  server.registerTool("map_repository_architecture", {
+    title: "Map repository architecture",
+    description: "Perform bounded, read-only static analysis of a GitHub repository. Summarizes languages, project manifests, declared frameworks, directory layout and likely entrypoints. Distinguishes observed, documented and inferred evidence. Does not execute code.",
+    inputSchema: {
+      repository: z.string().min(1).max(500).describe("GitHub owner/name or HTTPS repository URL."),
+      max_files: z.number().int().min(10).max(200).optional()
+    }
+  }, async ({ repository, max_files }) => {
+    try {
+      const report = await mapRepositoryArchitecture(repository, max_files ?? 120);
+      return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+    } catch (error) {
+      return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Repository architecture mapping failed." }] };
     }
   });
 
