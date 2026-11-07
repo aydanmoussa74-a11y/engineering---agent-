@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
 import { mapRepositoryArchitecture } from "./rea.js";
+import { validateSkillPackage } from "./skills.js";
 
 const server = new McpServer({ name: "engineering-agent", version: "0.1.0" });
 
@@ -36,6 +37,23 @@ server.registerTool("map_repository_architecture", {
   } catch (error) {
     return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Repository architecture mapping failed." }] };
   }
+});
+
+server.registerTool("validate_skill_package", {
+  title: "Validate skill package",
+  description: "Validate a skill's flat YAML frontmatter, version, dependencies and requested permission scopes; calculate a SHA-256 content hash. Metadata validation only: does not install, enable, execute or grant permissions.",
+  inputSchema: {
+    content: z.string().min(1).max(50_000).describe("Complete SKILL.md content, maximum 50 KB."),
+    requested_permissions: z.array(z.string().min(1).max(100)).max(20).optional(),
+    dependencies: z.array(z.string().min(1).max(100)).max(30).optional()
+  }
+}, async ({ content, requested_permissions, dependencies }) => {
+  const result = validateSkillPackage({
+    content,
+    requestedPermissions: requested_permissions,
+    dependencies
+  });
+  return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 });
 
 server.registerTool("read_repository_file", {
