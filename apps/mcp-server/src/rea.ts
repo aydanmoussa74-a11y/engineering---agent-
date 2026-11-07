@@ -142,7 +142,84 @@ function summarizeManifest(input: ManifestInput): ManifestSummary | null {
   }
 }
 
-export function analyzeRepositoryStructure(paths: string[], manifestInputs: ManifestInput[]) {
+
+type SourceInput = { path: string; content: string };
+
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const IMPORT_PATTERN = /(?:\\bimport\\s+(?:[^"'()]*?\\s+from\\s*)?|\\bexport\\s+[^"'()]*?\\s+from\\s*|\\bimport\\s*\\(|\\brequire\\s*\\()(["'])([^"']+)\\1\\s*\\)?/g;
+
+function resolveRelativeImport(fromPath: string, specifier: string, knownPaths: Set<string>): string | null {
+  const parts = fromPath.split("/");
+  parts.pop();
+  for (const part of specifier.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  const base = parts.join("/");
+  const candidates = [base, ...SOURCE_EXTENSIONS.map((ext) => base + ext),
+    ...SOURCE_EXTENSIONS.map((ext) => base + "/index" + ext)];
+  return candidates.find((candidate) => knownPaths.has(candidate)) ?? null;
+}
+
+export function analyzeImportGraph(paths: string[], sourceInputs: SourceInput[]) {
+  const knownPaths = new Set(paths);
+  const edges: Array<{ from: string; to: string; specifier: string; classification: string }> = [];
+  const externalImports = new Map<string, Set<string>>();
+  const unresolvedImports: Array<{ from: string; specifier: string }> = [];
+  const scanned = new Set<string>();
+
+  for (const input of sourceInputs) {
+    if (!knownPaths.has(input.path)) continue;
+    scanned.add(input.path);
+    IMPORT_PATTERN.lastIndex = 0;
+    for (const match of input.content.matchAll(IMPORT_PATTERN)) {
+      const specifier = match[2];
+      if (!specifier) continue;
+      if (specifier.startsWith(".")) {
+        const target = resolveRelativeImport(input.path, specifier, knownPaths);
+        if (target) edges.push({ from: input.path, to: target, specifier, classification: "observed_static_reference" });
+        else unresolvedImports.push({ from: input.path, specifier });
+      } else if (!specifier.startsWith("/") && !specifier.startsWith("#")) {
+        const packageName = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
+        if (packageName) {
+          const users = externalImports.get(packageName) ?? new Set<string>();
+          users.add(input.path);
+          externalImports.set(packageName, users);
+        }
+      }
+    }
+  }
+
+  const incoming = new Map<string, number>();
+  const outgoing = new Map<string, number>();
+  for (const edge of edges) {
+    outgoing.set(edge.from, (outgoing.get(edge.from) ?? 0) + 1);
+    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
+  }
+  const connectedFiles = [...scanned].filter((path) => (incoming.get(path) ?? 0) + (outgoing.get(path) ?? 0) > 0);
+  const centralModules = [...scanned]
+    .map((path) => ({ path, incomingReferences: incoming.get(path) ?? 0, outgoingReferences: outgoing.get(path) ?? 0 }))
+    .filter((item) => item.incomingReferences > 0 || item.outgoingReferences > 0)
+    .sort((a, b) => b.incomingReferences + b.outgoingReferences - a.incomingReferences - a.outgoingReferences)
+    .slice(0, 20);
+  return {
+    scannedFileCount: scanned.size,
+    edgeCount: edges.length,
+    edges: edges.slice(0, 500),
+    externalPackages: [...externalImports.entries()].map(([name, users]) => ({ name, referencedByCount: users.size, sampleFiles: [...users].slice(0, 5) })).sort((a, b) => b.referencedByCount - a.referencedByCount).slice(0, 50),
+    centralModules,
+    disconnectedScannedFiles: [...scanned].filter((path) => !connectedFiles.includes(path)).slice(0, 50),
+    unresolvedRelativeImports: unresolvedImports.slice(0, 100),
+    limitations: [
+      "Only literal import, export-from, require and dynamic-import specifiers in scanned JavaScript/TypeScript files are considered.",
+      "Path aliases, package export maps, generated modules, conditional resolution and non-JavaScript languages are not resolved.",
+      "A missing target may be outside the sampled tree or use an unsupported resolution rule; it is not proof of a broken import."
+    ]
+  };
+}
+
+export function analyzeRepositoryStructure(paths: string[], manifestInputs: ManifestInput[], sourceInputs: SourceInput[] = []) {
   const languageCounts = new Map<string, number>();
   const directoryCounts = new Map<string, number>();
   for (const path of paths) {
@@ -155,6 +232,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
   }
 
   const manifests = manifestInputs.map(summarizeManifest).filter((item): item is ManifestSummary => item !== null);
+  const importGraph = analyzeImportGraph(paths, sourceInputs);
   const frameworkSignals = [...new Set(manifests.flatMap((item) => item.frameworks))];
   const entrypointCandidates = paths
     .filter((path) => /(^|\/)(index|main|app|server|manage|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|php|rb)$/i.test(path))
@@ -215,6 +293,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
     manifests,
     frameworkSignals,
     entrypointCandidates,
+    importGraph,
     evidence,
     limitations: [
       "This is bounded static repository analysis, not proof of runtime behavior.",
@@ -246,6 +325,20 @@ export async function mapRepositoryArchitecture(input: string, maxFiles = 120) {
     }
   }
 
+  const sourceInputs: SourceInput[] = [];
+  const sourcePaths = snapshot.paths.filter((path) => /\\.(ts|tsx|js|jsx|mjs|cjs)$/i.test(path)).slice(0, 50);
+  for (const path of sourcePaths) {
+    if (remainingBytes <= 0) break;
+    try {
+      const content = await readRepositoryFile(snapshot.repository.fullName, path, snapshot.defaultBranch);
+      const bounded = content.slice(0, Math.min(content.length, remainingBytes, 5_000));
+      sourceInputs.push({ path, content: bounded });
+      remainingBytes -= Buffer.byteLength(bounded, "utf8");
+    } catch {
+      failures.push(path);
+    }
+  }
+
   return {
     repository: snapshot.repository,
     defaultBranch: snapshot.defaultBranch,
@@ -254,7 +347,7 @@ export async function mapRepositoryArchitecture(input: string, maxFiles = 120) {
     sampledPathCount: snapshot.paths.length,
     treeTruncated: snapshot.truncated,
     readmeAvailable: snapshot.readme !== null,
-    architecture: analyzeRepositoryStructure(snapshot.paths, manifestInputs),
+    architecture: analyzeRepositoryStructure(snapshot.paths, manifestInputs, sourceInputs),
     manifestReadFailures: failures,
     analysisMode: "static, read-only, bounded"
   };
