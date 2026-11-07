@@ -7,6 +7,8 @@ import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
 import { mapRepositoryArchitecture } from "./rea.js";
 import { validateSkillPackage } from "./skills.js";
+import { registerSkillRegistryTools } from "./registry.js";
+import { registerTaskTools } from "./tasks.js";
 import { createFixedWindowRateLimiter, isAllowedHost, isAuthorizedBearer } from "./security.js";
 
 
@@ -62,13 +64,16 @@ function json(res: ServerResponse, status: number, body: unknown) {
 async function verifySchema() {
   const result = await pool.query(
     "SELECT 1 FROM schema_migrations WHERE version = $1",
-    ["001_initial_memory_and_tasks.sql"]
+    ["002_skills_registry_and_execution.sql"]
   );
   if (!result.rowCount) throw new Error("Required database migration is not applied.");
 }
 
 function makeMcpServer() {
   const server = new McpServer({ name: "engineering-agent", version: "0.2.0" });
+
+  registerSkillRegistryTools(server, pool, tenantId);
+  registerTaskTools(server, pool, tenantId);
 
   server.registerTool("inspect_repository", {
     title: "Inspect GitHub repository",
