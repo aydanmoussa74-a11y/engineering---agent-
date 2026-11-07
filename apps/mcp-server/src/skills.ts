@@ -36,7 +36,7 @@ export function validateSkillPackage(input: SkillValidationInput) {
   if (!frontmatter) {
     errors.push("SKILL.md must begin with a YAML frontmatter block.");
   } else {
-    for (const line of frontmatter[1].split(/\r?\n/)) {
+    for (const line of (frontmatter[1] ?? "").split(/\r?\n/)) {
       const match = line.match(/^([a-z][a-z0-9_-]*):\s*(.*)$/i);
       if (match?.[1]) metadata[match[1].toLowerCase()] = scalar(match[2] ?? "");
     }
