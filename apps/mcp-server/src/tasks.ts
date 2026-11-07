@@ -84,6 +84,7 @@ export function registerTaskTools(server: McpServer, pool: Pool, tenantId: strin
       );
       if (!task.rowCount) throw new Error("Task not found.");
       if (task.rows[0].status !== "awaiting_approval") throw new Error("Task is not currently waiting for approval.");
+      if (task.rows[0].approval_state !== "pending") throw new Error("This task approval gate has already been decided.");
       const updated = await client.query(
         "UPDATE agent_tasks SET approval_state=$3,checkpoint=$4,updated_at=now(),status=CASE WHEN $3='rejected' THEN 'blocked' ELSE status END,blocked_reason=CASE WHEN $3='rejected' THEN 'User rejected the requested operation.' ELSE NULL END WHERE tenant_id=$1 AND task_id=$2 RETURNING task_id,status,approval_state,updated_at",
         [tenantId,task_id,decision,note ?? "Approval decision recorded by " + approved_by + "."]
@@ -139,7 +140,7 @@ export function registerTaskTools(server: McpServer, pool: Pool, tenantId: strin
       if (next_status === "completed" && !taskResult) throw new Error("A verification result is required before completion.");
       if (next_status === "completed" && Array.isArray(current.acceptance_criteria) && current.acceptance_criteria.length > 0 && taskResult?.acceptance_criteria_met !== true) throw new Error("Acceptance criteria must be explicitly marked as met before task completion.");
       const updated = await client.query(
-        "UPDATE agent_tasks SET status=$3,checkpoint=$4,current_step=COALESCE($5,current_step),attempt_count=$6,result=COALESCE($7::jsonb,result),blocked_reason=$8,started_at=CASE WHEN $3='executing' AND started_at IS NULL THEN now() ELSE started_at END,completed_at=CASE WHEN $3='completed' THEN now() ELSE NULL END,updated_at=now() WHERE tenant_id=$1 AND task_id=$2 RETURNING *",
+        "UPDATE agent_tasks SET status=$3,checkpoint=$4,current_step=COALESCE($5,current_step),attempt_count=$6,result=COALESCE($7::jsonb,result),blocked_reason=$8,approval_state=CASE WHEN $3='awaiting_approval' THEN 'pending' ELSE approval_state END,started_at=CASE WHEN $3='executing' AND started_at IS NULL THEN now() ELSE started_at END,completed_at=CASE WHEN $3='completed' THEN now() ELSE NULL END,updated_at=now() WHERE tenant_id=$1 AND task_id=$2 RETURNING *",
         [tenantId,task_id,next_status,checkpoint,current_step ?? null,nextAttempt,taskResult ? JSON.stringify(taskResult) : null,blocked_reason ?? null]
       );
       await client.query(
