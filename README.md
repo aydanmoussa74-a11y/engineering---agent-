@@ -44,7 +44,7 @@ Set these as secret environment variables in the hosting provider:
 - `PUBLIC_HOST`: exact public hostname used for Host-header validation.
 - `PORT`: supplied by Render.
 
-Database schema is managed by versioned SQL files under `apps/mcp-server/migrations`; migrations run transactionally at startup.
+Database schema is managed by versioned SQL files under `apps/mcp-server/migrations`. Apply migrations through the reviewed Neon migration workflow before deploying; the runtime verifies the required migration at startup and refuses to start if it is missing.
 
 For private repositories, use a fine-grained token with read-only access to only the required repositories. Never commit tokens.
 
