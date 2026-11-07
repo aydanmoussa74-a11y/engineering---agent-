@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.0",
-  "engines": { "node": ">=20.0.0" },
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm --filter @engineering-agent/mcp-server dev",
