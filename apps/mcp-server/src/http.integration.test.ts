@@ -308,7 +308,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       const researchBrief = JSON.parse(research.content[0].text) as { research_id: string; status: string };
       expect(researchBrief.status).toBe("researching");
 
-      const source = await callTool(21, "save_research_source", {
+      const incompleteBrief = await callTool(21, "update_research_synthesis", {
+        research_id: researchBrief.research_id,
+        status: "completed",
+        synthesis: "This should not complete without evidence."
+      });
+      expect(incompleteBrief.isError).toBe(true);
+
+      const source = await callTool(22, "save_research_source", {
         research_id: researchBrief.research_id,
         url: "https://docs.example.test/mcp/reference",
         title: "MCP Reference",
@@ -321,7 +328,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       const sourceRecord = JSON.parse(source.content[0].text) as { source_id: string; content_sha256: string };
       expect(sourceRecord.content_sha256).toMatch(/^[a-f0-9]{64}$/);
 
-      const unsupportedClaim = await callTool(22, "record_research_claim", {
+      const unsupportedClaim = await callTool(24, "record_research_claim", {
         research_id: researchBrief.research_id,
         claim: "An unsupported documented statement.",
         classification: "documented",
@@ -338,14 +345,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         source_ids: [sourceRecord.source_id],
         rationale: "Directly supported by the saved source excerpt."
       });
-      const incompleteBrief = await callTool(24, "update_research_synthesis", {
-        research_id: researchBrief.research_id,
-        status: "completed",
-        synthesis: "This should not complete without the required evidence source and claim count."
-      });
-      expect(incompleteBrief.isError).toBe(false);
-
-      const savedSynthesis = await callTool(25, "update_research_synthesis", {
+      const savedSynthesis = await callTool(26, "update_research_synthesis", {
         research_id: researchBrief.research_id,
         status: "completed",
         synthesis: "The research fixture contains one documented claim backed by one saved reference.",
@@ -353,7 +353,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         unresolved_questions: ["No live endpoint was inspected."]
       });
       expect(JSON.parse(savedSynthesis.content[0].text).status).toBe("completed");
-      const fullResearch = await callTool(26, "get_research_brief", { research_id: researchBrief.research_id });
+      const fullResearch = await callTool(27, "get_research_brief", { research_id: researchBrief.research_id });
       const fullResearchData = JSON.parse(fullResearch.content[0].text) as {
         sources: Array<{ source_id: string }>;
         claims: Array<{ classification: string }>;
@@ -366,7 +366,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
 
       const projectId = "integration-project-" + randomUUID();
-      const savedMemory = await callTool(27, "save_project_memory", {
+      const savedMemory = await callTool(28, "save_project_memory", {
         project_id: projectId,
         kind: "architecture_decision",
         content: "Integration test verifies repository architecture memory persistence.",
@@ -375,7 +375,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(savedMemory?.isError).not.toBe(true);
 
-      const searchedMemory = await callTool(28, "search_project_memory", {
+      const searchedMemory = await callTool(29, "search_project_memory", {
         project_id: projectId,
         query: "repository architecture",
         limit: 5
@@ -389,14 +389,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       ]));
 
       const taskId = "integration-task-" + randomUUID();
-      await callTool(29, "save_task_checkpoint", {
+      await callTool(30, "save_task_checkpoint", {
         task_id: taskId,
         project_id: projectId,
         goal: "Verify remote MCP persistence",
         status: "verifying",
         checkpoint: "Memory and task tools are connected to the test database."
       });
-      const checkpoint = await callTool(30, "get_task_checkpoint", { task_id: taskId });
+      const checkpoint = await callTool(31, "get_task_checkpoint", { task_id: taskId });
       const checkpointData = JSON.parse(checkpoint.content[0].text) as {
         task: { task_id: string; status: string };
         recent_events: Array<{ status: string }>;
