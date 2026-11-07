@@ -7,6 +7,7 @@ import { validateSkillPackage } from "./skills.js";
 import { Pool } from "pg";
 import { registerSkillRegistryTools } from "./registry.js";
 import { registerTaskTools } from "./tasks.js";
+import { registerResearchTools } from "./research.js";
 
 const server = new McpServer({ name: "engineering-agent", version: "0.2.0" });
 const databaseUrl = process.env.DATABASE_URL ?? "";
@@ -15,6 +16,7 @@ const pool = databaseUrl ? new Pool({ connectionString: databaseUrl, max: 5, idl
 if (pool) {
   registerSkillRegistryTools(server, pool, tenantId);
   registerTaskTools(server, pool, tenantId);
+  registerResearchTools(server, pool, tenantId);
 }
 
 server.registerTool("inspect_repository", {
