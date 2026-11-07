@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeImportGraph, analyzeRepositoryStructure } from "./rea.js";
+import { analyzeImportGraph, analyzeRepositoryStructure, analyzeSymbolIndex } from "./rea.js";
 
 describe("static repository architecture mapping", () => {
   it("classifies observed languages and declared frameworks separately", () => {
@@ -92,6 +92,33 @@ describe("static repository architecture mapping", () => {
       path: "src/main.go",
       classification: "inferred"
     });
+  });
+});
+
+describe("bounded static symbol index", () => {
+  it("indexes declarations and reports lexical cross-file references", () => {
+    const index = analyzeSymbolIndex([
+      { path: "src/core.ts", content: "export function boot() { return true; }\nclass InternalEngine {}" },
+      { path: "src/main.ts", content: 'import { boot } from "./core";\nboot();' }
+    ]);
+
+    expect(index.symbols).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: "src/core.ts",
+        name: "boot",
+        kind: "function",
+        exported: true,
+        line: 1,
+        referencedByFiles: ["src/main.ts"]
+      }),
+      expect.objectContaining({
+        path: "src/core.ts",
+        name: "InternalEngine",
+        kind: "class",
+        exported: false
+      })
+    ]));
+    expect(index.crossFileReferenceCount).toBe(1);
   });
 });
 
