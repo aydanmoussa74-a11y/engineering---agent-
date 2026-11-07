@@ -26,6 +26,7 @@ type ManifestSummary = {
   version: string | null;
   dependencyCount: number;
   scripts: string[];
+  scriptCommands: Record<string, string>;
   frameworks: string[];
 };
 
@@ -73,6 +74,7 @@ function packageSummary(path: string, content: string): ManifestSummary {
     version: parsed.version ?? null,
     dependencyCount: names.size,
     scripts: Object.keys(parsed.scripts ?? {}).slice(0, 30),
+    scriptCommands: Object.fromEntries(Object.entries(parsed.scripts ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string").slice(0, 30)),
     frameworks: FRAMEWORKS.filter((item) => names.has(item.packageName)).map((item) => item.label)
   };
 }
@@ -107,6 +109,7 @@ function textManifestSummary(path: string, content: string): ManifestSummary {
     version: versionMatch?.[1] ?? null,
     dependencyCount,
     scripts: [],
+    scriptCommands: {},
     frameworks
   };
 }
@@ -125,6 +128,7 @@ function summarizeManifest(input: ManifestInput): ManifestSummary | null {
         version: parsed.version ?? null,
         dependencyCount: Object.keys(deps).length,
         scripts: [],
+        scriptCommands: {},
         frameworks: []
       };
     }
@@ -137,6 +141,7 @@ function summarizeManifest(input: ManifestInput): ManifestSummary | null {
       version: null,
       dependencyCount: 0,
       scripts: [],
+      scriptCommands: {},
       frameworks: []
     };
   }
@@ -239,14 +244,55 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
   const manifests = manifestInputs.map(summarizeManifest).filter((item): item is ManifestSummary => item !== null);
   const importGraph = analyzeImportGraph(paths, sourceInputs);
   const frameworkSignals = [...new Set(manifests.flatMap((item) => item.frameworks))];
-  const entrypointCandidates = paths
-    .filter((path) => /(^|\/)(index|main|app|server|manage|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|php|rb)$/i.test(path))
-    .slice(0, 30)
-    .map((path) => ({
-      path,
-      classification: "inferred",
-      reason: "Conventional entrypoint filename; execution flow has not yet been traced."
-    }));
+  const scriptedEntrypoints = manifests.flatMap((manifest) =>
+    Object.entries(manifest.scriptCommands).flatMap(([script, command]) => {
+      const match = command.match(/\\b(?:tsx|ts-node|node|bun|deno\\s+run|python3?|uvicorn)\\s+([./A-Za-z0-9_@/-]+\\.(?:ts|tsx|js|jsx|mjs|cjs|py))\\b/);
+      if (!match?.[1]) return [];
+      const target = match[1].replace(/^\\.\\//, "");
+      return paths.includes(target) ? [{ path: target, script, manifestPath: manifest.path }] : [];
+    })
+  );
+  const scriptByPath = new Map<string, Array<{ script: string; manifestPath: string }>>();
+  for (const item of scriptedEntrypoints) {
+    const entries = scriptByPath.get(item.path) ?? [];
+    entries.push({ script: item.script, manifestPath: item.manifestPath });
+    scriptByPath.set(item.path, entries);
+  }
+  const candidatePaths = new Set([
+    ...paths.filter((path) => /(^|\\/)(index|main|app|server|manage|cli)\\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|php|rb)$/i.test(path)),
+    ...scriptByPath.keys()
+  ]);
+  const incomingReferences = new Map<string, number>();
+  const outgoingReferences = new Map<string, number>();
+  for (const edge of importGraph.edges) {
+    incomingReferences.set(edge.to, (incomingReferences.get(edge.to) ?? 0) + 1);
+    outgoingReferences.set(edge.from, (outgoingReferences.get(edge.from) ?? 0) + 1);
+  }
+  const entrypointCandidates = [...candidatePaths]
+    .map((path) => {
+      const scripts = scriptByPath.get(path) ?? [];
+      const incoming = incomingReferences.get(path) ?? 0;
+      const outgoing = outgoingReferences.get(path) ?? 0;
+      const reason = scripts.length
+        ? "Referenced by manifest script(s): " + scripts.map((item) => item.script + " (" + item.manifestPath + ")").join(", ") + "."
+        : incoming === 0
+          ? "Conventional entrypoint filename with no incoming imports in the sampled graph."
+          : "Conventional filename, but other scanned modules import it; it may be a nested module.";
+      return {
+        path,
+        classification: "inferred",
+        confidence: scripts.length ? "medium" : incoming === 0 ? "medium" : "low",
+        incomingReferences: incoming,
+        outgoingReferences: outgoing,
+        declaredByScripts: scripts.map((item) => item.script),
+        reason
+      };
+    })
+    .sort((a, b) => Number(b.declaredByScripts.length > 0) - Number(a.declaredByScripts.length > 0)
+      || a.incomingReferences - b.incomingReferences
+      || b.outgoingReferences - a.outgoingReferences
+      || a.path.localeCompare(b.path))
+    .slice(0, 30);
 
   const languages = [...languageCounts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -302,7 +348,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
     evidence,
     limitations: [
       "This is bounded static repository analysis, not proof of runtime behavior.",
-      "Entrypoint candidates are inferred from conventional filenames and still need import/call-graph tracing.",
+      "Entrypoint candidates combine conventional filenames, sampled import direction and explicit manifest script commands; framework-specific launchers and indirect scripts may still be missed.",
       "Only selected manifest files and the sampled repository tree were inspected.",
       "No dependency installation, code execution, or deployment was performed."
     ]
