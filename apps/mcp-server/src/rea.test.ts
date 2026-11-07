@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeRepositoryStructure } from "./rea.js";
+import { analyzeImportGraph, analyzeRepositoryStructure } from "./rea.js";
 
 describe("static repository architecture mapping", () => {
   it("classifies observed languages and declared frameworks separately", () => {
@@ -65,5 +65,44 @@ describe("static repository architecture mapping", () => {
       path: "src/main.go",
       classification: "inferred"
     });
+  });
+});
+
+describe("bounded JavaScript and TypeScript import graph", () => {
+  it("resolves relative imports and reports central modules and external packages", () => {
+    const paths = ["src/main.ts", "src/core.ts", "src/ui/App.tsx", "src/ui/index.ts"];
+    const graph = analyzeImportGraph(paths, [
+      { path: "src/main.ts", content: 'import { start } from "./core"; import React from "react";' },
+      { path: "src/ui/App.tsx", content: 'export { default } from "./index"; import { start } from "../core";' },
+      { path: "src/ui/index.ts", content: 'export const view = true;' }
+    ]);
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: "src/main.ts", to: "src/core.ts" }),
+      expect.objectContaining({ from: "src/ui/App.tsx", to: "src/ui/index.ts" }),
+      expect.objectContaining({ from: "src/ui/App.tsx", to: "src/core.ts" })
+    ]));
+    expect(graph.externalPackages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "react", referencedByCount: 1 })
+    ]));
+    expect(graph.centralModules[0]?.path).toBe("src/core.ts");
+  });
+
+  it("keeps unresolved relative imports explicit and does not claim they are broken", () => {
+    const graph = analyzeImportGraph(["src/main.ts"], [
+      { path: "src/main.ts", content: 'import "./generated/virtual";' }
+    ]);
+    expect(graph.unresolvedRelativeImports).toEqual([
+      { from: "src/main.ts", specifier: "./generated/virtual" }
+    ]);
+    expect(graph.limitations.some((item) => item.includes("not proof of a broken import"))).toBe(true);
+  });
+
+  it("ignores non-relative package aliases and unscanned files", () => {
+    const graph = analyzeImportGraph(["src/main.ts", "src/other.ts"], [
+      { path: "src/main.ts", content: 'import data from "#internal/data";' },
+      { path: "not-in-tree.ts", content: 'import "./missing";' }
+    ]);
+    expect(graph.edges).toEqual([]);
+    expect(graph.unresolvedRelativeImports).toEqual([]);
   });
 });
