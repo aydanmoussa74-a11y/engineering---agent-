@@ -29,11 +29,16 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
 
   it("authenticates, initializes MCP, lists tools and persists memory/task checkpoints", async () => {
     const database = new Pool({ connectionString: DATABASE_URL });
-    const migration = await readFile(
+    const initialMigration = await readFile(
       new URL("../migrations/001_initial_memory_and_tasks.sql", import.meta.url),
       "utf8"
     );
-    await database.query(migration);
+    const workflowMigration = await readFile(
+      new URL("../migrations/002_skills_registry_and_execution.sql", import.meta.url),
+      "utf8"
+    );
+    await database.query(initialMigration);
+    await database.query(workflowMigration);
 
     const portProbe = createNetServer();
     await new Promise<void>((resolve, reject) => {
@@ -152,7 +157,19 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         "search_project_memory",
         "save_task_checkpoint",
         "get_task_checkpoint",
-        "validate_skill_package"
+        "validate_skill_package",
+        "install_skill",
+        "list_skills",
+        "inspect_skill",
+        "read_skill_instructions",
+        "record_skill_permission_decisions",
+        "enable_skill",
+        "disable_skill",
+        "archive_skill",
+        "create_engineering_task",
+        "record_task_approval",
+        "advance_engineering_task",
+        "get_engineering_task"
       ]));
 
       async function callTool(id: number, name: string, args: Record<string, unknown>) {
@@ -181,8 +198,98 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         permissionsGranted: []
       });
 
+      const installed = await callTool(4, "install_skill", {
+        content: "---\nname: ci-sample-skill\nversion: 1.0.0\ndescription: CI validation sample\n---\n\nRead-only test skill.",
+        requested_permissions: ["repository.read"],
+        dependencies: ["typescript"],
+        source_ref: "ci://sample-skill",
+        publisher: "integration-test"
+      });
+      const installedSkill = JSON.parse(installed.content[0].text) as {
+        installed: boolean;
+        skill: { skill_id: string; status: string };
+        enabled: boolean;
+        permission_state: string;
+      };
+      expect(installedSkill).toMatchObject({
+        installed: true,
+        skill: { status: "installed" },
+        enabled: false,
+        permission_state: "pending_user_approval"
+      });
+
+      const inspected = await callTool(5, "inspect_skill", { skill_id: installedSkill.skill.skill_id });
+      const inspectedData = JSON.parse(inspected.content[0].text) as { permissions: Array<{ approval_status: string }> };
+      expect(inspectedData.permissions[0]?.approval_status).toBe("pending");
+
+      const enabledBeforeApproval = await callTool(6, "enable_skill", { skill_id: installedSkill.skill.skill_id });
+      expect(enabledBeforeApproval.isError).toBe(true);
+
+      await callTool(7, "record_skill_permission_decisions", {
+        skill_id: installedSkill.skill.skill_id,
+        version: "1.0.0",
+        decisions: [{ scope: "repository.read", decision: "approved" }],
+        approved_by: "ci-integration-operator"
+      });
+      const enabled = await callTool(8, "enable_skill", { skill_id: installedSkill.skill.skill_id });
+      const enabledData = JSON.parse(enabled.content[0].text) as { enabled: boolean; execution_enabled: boolean };
+      expect(enabledData).toMatchObject({ enabled: true, execution_enabled: false });
+
+      const taskId = "workflow-task-" + randomUUID();
+      const createdTask = await callTool(9, "create_engineering_task", {
+        task_id: taskId,
+        project_id: "workflow-project",
+        goal: "Verify the persistent engineering task state machine",
+        plan: ["Inspect", "Implement", "Verify"],
+        acceptance_criteria: ["All workflow transitions are persisted"],
+        requires_approval: true,
+        max_attempts: 2
+      });
+      const createdTaskData = JSON.parse(createdTask.content[0].text) as { status: string; approval_state: string };
+      expect(createdTaskData).toMatchObject({ status: "awaiting_approval", approval_state: "pending" });
+
+      await callTool(10, "record_task_approval", {
+        task_id: taskId,
+        decision: "approved",
+        approved_by: "ci-integration-operator",
+        note: "Integration test approval."
+      });
+      await callTool(11, "advance_engineering_task", {
+        task_id: taskId,
+        next_status: "executing",
+        checkpoint: "Execution phase started.",
+        current_step: "Implement",
+        increment_attempt: true
+      });
+      await callTool(12, "advance_engineering_task", {
+        task_id: taskId,
+        next_status: "verifying",
+        checkpoint: "Implementation checks are ready."
+      });
+      const prematureCompletion = await callTool(13, "advance_engineering_task", {
+        task_id: taskId,
+        next_status: "completed",
+        checkpoint: "Attempted completion without acceptance evidence.",
+        result: { acceptance_criteria_met: false }
+      });
+      expect(prematureCompletion.isError).toBe(true);
+
+      await callTool(14, "advance_engineering_task", {
+        task_id: taskId,
+        next_status: "completed",
+        checkpoint: "All acceptance criteria passed.",
+        result: { acceptance_criteria_met: true, checks: ["workflow-state", "approval-gate"] }
+      });
+      const workflow = await callTool(15, "get_engineering_task", { task_id: taskId });
+      const workflowData = JSON.parse(workflow.content[0].text) as {
+        task: { status: string; attempt_count: number; approval_state: string };
+        recent_events: Array<{ event_type: string }>;
+      };
+      expect(workflowData.task).toMatchObject({ status: "completed", attempt_count: 1, approval_state: "approved" });
+      expect(workflowData.recent_events.map((event) => event.event_type)).toContain("state_transition");
+
       const projectId = "integration-project-" + randomUUID();
-      const savedMemory = await callTool(4, "save_project_memory", {
+      const savedMemory = await callTool(16, "save_project_memory", {
         project_id: projectId,
         kind: "architecture_decision",
         content: "Integration test verifies repository architecture memory persistence.",
@@ -191,7 +298,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(savedMemory?.isError).not.toBe(true);
 
-      const searchedMemory = await callTool(5, "search_project_memory", {
+      const searchedMemory = await callTool(17, "search_project_memory", {
         project_id: projectId,
         query: "repository architecture",
         limit: 5
@@ -205,14 +312,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       ]));
 
       const taskId = "integration-task-" + randomUUID();
-      await callTool(6, "save_task_checkpoint", {
+      await callTool(18, "save_task_checkpoint", {
         task_id: taskId,
         project_id: projectId,
         goal: "Verify remote MCP persistence",
         status: "verifying",
         checkpoint: "Memory and task tools are connected to the test database."
       });
-      const checkpoint = await callTool(7, "get_task_checkpoint", { task_id: taskId });
+      const checkpoint = await callTool(19, "get_task_checkpoint", { task_id: taskId });
       const checkpointData = JSON.parse(checkpoint.content[0].text) as {
         task: { task_id: string; status: string };
         recent_events: Array<{ status: string }>;
