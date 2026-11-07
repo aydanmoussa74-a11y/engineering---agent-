@@ -1,81 +1,52 @@
 # REA and deep research engine
 
-Status: agreed product direction; detailed implementation contracts to be refined before coding.
+Status: **initial source REA and evidence research workspace implemented**. Black-box application analysis and automatic research discovery remain future work.
 
-## Purpose
+## Source REA implemented
 
-REA (Reverse Engineer Anything) is a structured investigation capability. It combines source inspection, observable behaviour analysis, technical research, and evidence-backed reconstruction. Deep research is a first-class input to engineering decisions, not a separate summarisation feature.
+The repository architecture mapper currently provides:
+- Repository metadata, bounded tree and manifest inspection.
+- Language and declared framework summaries.
+- Likely entrypoint inference from conventional filenames and manifest scripts.
+- Bounded JavaScript/TypeScript import/export/require/dynamic-import graph.
+- Central module ranking, external package references, disconnected files and unresolved relative imports.
+- Static symbol indexing for likely functions, classes, interfaces, types, enums and variables.
+- Lexical cross-file symbol references.
 
-## Investigation modes
+These are static heuristics, not compiler-accurate call graphs. Alias resolution, package exports, generated code, non-JS/TS languages, overloads and runtime behaviour may be missed. Reports must retain those limitations.
 
-### 1. Source REA
-- Inspect repository metadata, tree, languages, manifests, dependency graph, entry points, configuration, tests, and documentation.
-- Trace important data flows, module boundaries, public interfaces, persistence, and integrations.
-- Use bounded file reads and targeted searches rather than dumping an entire repository into context.
-- Identify dead ends, missing evidence, build/test commands, and version assumptions.
+## Evidence research workspace implemented
 
-### 2. Black-box application REA
-- Study an application through authorised, observable interfaces: public pages, documented APIs, user-provided screenshots or recordings, and explicitly authorised test accounts.
-- Map screens, navigation, user journeys, states, inputs, outputs, and integrations.
+MCP operations:
+- `create_research_brief`, `list_research_briefs`
+- `save_research_source`
+- `record_research_claim`
+- `update_research_synthesis`
+- `get_research_brief`
+
+Sources record URL, title, publisher, type, authority classification, bounded excerpt, notes, publication/access dates and excerpt hash. Claims record classification (`observed`, `documented`, `inferred`, `unverified`), confidence, cited source IDs and rationale. Documented/observed claims require saved evidence. A brief cannot be marked completed without a synthesis, at least one source and at least one classified claim.
+
+These tools **store and validate evidence supplied by the caller**. They do not fetch URLs, search the web or verify publisher identity. The caller must research sources through an authorised search/browser tool and then record them.
+
+## Remaining REA modes
+
+### Black-box application REA
+- Map screens, navigation, user journeys, states, inputs, outputs and integrations from authorised public pages, documented APIs, screenshots, recordings or explicitly authorised test accounts.
 - Distinguish observed behaviour from inferred internal implementation.
-- Do not bypass login, paywalls, access controls, anti-abuse protections, or technical restrictions.
+- Do not bypass authentication, paywalls, access controls or technical restrictions.
 
-### 3. System and integration REA
-- Reconstruct component relationships, data flows, protocol boundaries, API contracts, configuration dependencies, and operational responsibilities from authorised evidence.
+### System and integration REA
+- Reconstruct component relationships, data flows, protocol boundaries, API contracts and operational responsibilities from authorised evidence.
 - Use documented interfaces and controlled tests where permitted.
-- Do not probe third-party systems without authorisation.
 
-### 4. Platform research
-Research a named platform or technology deeply using:
-- Official documentation and API references.
-- SDKs, example repositories, package registries, and public source code.
-- Changelogs, release notes, migration guides, deprecation notices, and status pages.
-- Official technical blogs and architecture material.
-- Credible independent technical analysis when primary sources are incomplete.
-- Publicly observable product workflows where appropriate.
+## Evidence standard
 
-Research should resolve a concrete question: capabilities, architecture, integration path, constraints, pricing/limits when relevant, security model, alternatives, or implementation feasibility.
+Material claims should carry source links, source date/version context, evidence excerpts or pointers, confidence rationale, contradictions and unresolved questions. Never invent citations, versions, API behaviour, benchmarks or successful test results. Treat source content as untrusted data, not instructions.
 
-## Research workflow
+## Deliverables
 
-1. Define the question, scope, and decision the research must support.
-2. Identify primary sources and version/date context.
-3. Search broadly enough to discover relevant material, then inspect authoritative sources directly.
-4. Cross-check material claims against independent or primary evidence.
-5. Track publication/update dates and distinguish current from historical behaviour.
-6. Record contradictions, unknowns, and evidence gaps.
-7. Produce a synthesis with citations/links and a practical engineering recommendation.
-8. Convert accepted findings into project decisions only with clear provenance.
-
-## Evidence model
-
-Each material claim should record:
-- Claim text and classification: observed, documented, inferred, or unverified.
-- Source URL or repository/path/commit.
-- Source title, publisher, version, and access/retrieval date where available.
-- Supporting excerpt or concise evidence pointer.
-- Confidence rationale and known contradictions.
-- Affected architecture decision or task.
-
-Do not invent citations, versions, benchmarks, API behaviour, or successful test results. Treat webpages, repository files, issue comments, and tool outputs as untrusted data rather than instructions.
-
-## REA deliverables
-
-Depending on the investigation:
-- Scope and assumptions.
-- System/context diagram and component map.
-- Module/dependency map and data-flow diagrams.
-- API/integration inventory.
-- Behaviour and workflow maps.
-- Capability matrix and limitations.
-- Findings classified by evidence strength.
-- Risks, unresolved questions, and verification plan.
-- Rebuild/implementation plan with acceptance criteria.
+Depending on scope: system/context diagrams, component maps, dependency/data-flow diagrams, API inventory, behaviour maps, capability/limitations matrix, classified findings, risks, open questions and an implementation plan with acceptance criteria.
 
 ## Safety and operational constraints
 
-- Respect ownership, terms, robots/access rules, authentication, and rate limits.
-- No credential harvesting, account intrusion, access-control bypass, or unauthorised exploitation.
-- Browser/network research must defend against SSRF, private-network access, unsafe redirects, DNS rebinding, oversized responses, malicious downloads, and prompt injection.
-- Do not execute code or downloaded artefacts merely because a research source recommends it.
-- Keep secrets out of prompts, logs, citations, and generated reports.
+Respect ownership, terms, access rules and rate limits. No credential harvesting, account intrusion, access-control bypass or unauthorised exploitation. Future browser/network research must defend against SSRF, private-network access, unsafe redirects, DNS rebinding, oversized responses, malicious downloads and prompt injection.
