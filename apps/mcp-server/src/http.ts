@@ -258,7 +258,7 @@ const httpServer = createServer(async (req, res) => {
   let transport!: StreamableHTTPServerTransport;
   transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
-    onsessioninitialized: (id) => sessions.set(id, { server, transport })
+    onsessioninitialized: (id) => { sessions.set(id, { server, transport }); }
   });
   try {
     await server.connect(transport);
