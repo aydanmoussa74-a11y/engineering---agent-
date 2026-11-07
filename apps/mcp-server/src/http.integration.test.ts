@@ -246,9 +246,9 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       const enabledData = JSON.parse(enabled.content[0].text) as { enabled: boolean; execution_enabled: boolean };
       expect(enabledData).toMatchObject({ enabled: true, execution_enabled: false });
 
-      const taskId = "workflow-task-" + randomUUID();
+      const workflowTaskId = "workflow-task-" + randomUUID();
       const createdTask = await callTool(9, "create_engineering_task", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         project_id: "workflow-project",
         goal: "Verify the persistent engineering task state machine",
         plan: ["Inspect", "Implement", "Verify"],
@@ -260,25 +260,25 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       expect(createdTaskData).toMatchObject({ status: "awaiting_approval", approval_state: "pending" });
 
       await callTool(10, "record_task_approval", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         decision: "approved",
         approved_by: "ci-integration-operator",
         note: "Integration test approval."
       });
       await callTool(11, "advance_engineering_task", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         next_status: "executing",
         checkpoint: "Execution phase started.",
         current_step: "Implement",
         increment_attempt: true
       });
       await callTool(12, "advance_engineering_task", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         next_status: "verifying",
         checkpoint: "Implementation checks are ready."
       });
       const prematureCompletion = await callTool(13, "advance_engineering_task", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         next_status: "completed",
         checkpoint: "Attempted completion without acceptance evidence.",
         result: { acceptance_criteria_met: false }
@@ -286,12 +286,12 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       expect(prematureCompletion.isError).toBe(true);
 
       await callTool(14, "advance_engineering_task", {
-        task_id: taskId,
+        task_id: workflowTaskId,
         next_status: "completed",
         checkpoint: "All acceptance criteria passed.",
         result: { acceptance_criteria_met: true, checks: ["workflow-state", "approval-gate"] }
       });
-      const workflow = await callTool(15, "get_engineering_task", { task_id: taskId });
+      const workflow = await callTool(15, "get_engineering_task", { task_id: workflowTaskId });
       const workflowData = JSON.parse(workflow.content[0].text) as {
         task: { status: string; attempt_count: number; approval_state: string };
         recent_events: Array<{ event_type: string }>;
