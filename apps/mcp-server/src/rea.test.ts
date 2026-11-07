@@ -43,6 +43,33 @@ describe("static repository architecture mapping", () => {
     expect(report.evidence.some((item) => item.classification === "inferred")).toBe(true);
   });
 
+  it("ranks manifest-declared runtime entrypoints ahead of filename guesses", () => {
+    const report = analyzeRepositoryStructure(
+      ["src/main.ts", "src/core.ts", "src/server.ts", "package.json"],
+      [{
+        path: "package.json",
+        content: JSON.stringify({
+          scripts: {
+            dev: "tsx src/main.ts",
+            start: "node dist/server.js"
+          }
+        })
+      }],
+      [
+        { path: "src/main.ts", content: 'import { start } from "./core";' },
+        { path: "src/server.ts", content: 'export const server = true;' }
+      ]
+    );
+
+    expect(report.entrypointCandidates[0]).toMatchObject({
+      path: "src/main.ts",
+      declaredByScripts: ["dev"],
+      incomingReferences: 0
+    });
+    expect(report.entrypointCandidates.find((item) => item.path === "src/server.ts")?.reason)
+      .toContain("no incoming imports");
+  });
+
   it("keeps malformed manifests as unknown instead of failing the whole report", () => {
     const report = analyzeRepositoryStructure(
       ["main.py", "pyproject.toml"],
