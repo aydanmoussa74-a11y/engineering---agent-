@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS memory_records (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id text NOT NULL,
@@ -46,3 +51,7 @@ CREATE TABLE IF NOT EXISTS task_events (
 
 CREATE INDEX IF NOT EXISTS task_events_scope_task_idx
   ON task_events (tenant_id, task_id, id DESC);
+
+INSERT INTO schema_migrations(version)
+VALUES ('001_initial_memory_and_tasks.sql')
+ON CONFLICT (version) DO NOTHING;
