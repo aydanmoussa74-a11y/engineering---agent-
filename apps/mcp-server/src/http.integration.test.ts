@@ -104,7 +104,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
           if (contentType.includes("text/event-stream")) {
             const data = raw.split("\n").filter((line) => line.startsWith("data: "))
               .map((line) => line.slice(6));
-            if (data.length) parsed = JSON.parse(data[data.length - 1]) as Record<string, any>;
+            if (data.length) parsed = JSON.parse(data[data.length - 1]!) as Record<string, any>;
           } else {
             parsed = JSON.parse(raw) as Record<string, any>;
           }
