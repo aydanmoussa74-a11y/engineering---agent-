@@ -229,6 +229,58 @@ export function analyzeImportGraph(paths: string[], sourceInputs: SourceInput[])
   };
 }
 
+
+export function analyzeSymbolIndex(sourceInputs: SourceInput[]) {
+  const symbols: Array<{
+    path: string;
+    name: string;
+    kind: string;
+    exported: boolean;
+    line: number;
+    referencedByFiles: string[];
+  }> = [];
+  const declarationPattern = /(^|\n)\s*(export\s+(?:default\s+)?)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(function|class|interface|type|enum|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
+  const scanned = new Map<string, string>();
+
+  for (const input of sourceInputs) {
+    scanned.set(input.path, input.content);
+    declarationPattern.lastIndex = 0;
+    for (const match of input.content.matchAll(declarationPattern)) {
+      const name = match[4];
+      if (!name) continue;
+      const offset = (match.index ?? 0) + (match[1]?.length ?? 0);
+      const line = input.content.slice(0, offset).split("\n").length;
+      symbols.push({
+        path: input.path,
+        name,
+        kind: match[3] ?? "unknown",
+        exported: Boolean(match[2]),
+        line,
+        referencedByFiles: []
+      });
+    }
+  }
+
+  for (const symbol of symbols) {
+    const referencePattern = new RegExp("\\b" + symbol.name + "\\b");
+    for (const [path, content] of scanned) {
+      if (path !== symbol.path && referencePattern.test(content)) symbol.referencedByFiles.push(path);
+    }
+  }
+
+  return {
+    scannedFileCount: scanned.size,
+    symbolCount: symbols.length,
+    symbols: symbols.slice(0, 500),
+    crossFileReferenceCount: symbols.reduce((total, symbol) => total + symbol.referencedByFiles.length, 0),
+    limitations: [
+      "Symbol discovery uses bounded declaration-pattern matching, not a language parser or compiler symbol table.",
+      "Overloads, destructuring declarations, decorators, macros, generated symbols and language-specific syntax may be missed.",
+      "Cross-file references are lexical name matches; they do not prove that an import resolves to that exact declaration."
+    ]
+  };
+}
+
 export function analyzeRepositoryStructure(paths: string[], manifestInputs: ManifestInput[], sourceInputs: SourceInput[] = []) {
   const languageCounts = new Map<string, number>();
   const directoryCounts = new Map<string, number>();
@@ -243,6 +295,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
 
   const manifests = manifestInputs.map(summarizeManifest).filter((item): item is ManifestSummary => item !== null);
   const importGraph = analyzeImportGraph(paths, sourceInputs);
+  const symbolIndex = analyzeSymbolIndex(sourceInputs);
   const frameworkSignals = [...new Set(manifests.flatMap((item) => item.frameworks))];
   const scriptedEntrypoints = manifests.flatMap((manifest) =>
     Object.entries(manifest.scriptCommands).flatMap(([script, command]) => {
@@ -345,6 +398,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
     frameworkSignals,
     entrypointCandidates,
     importGraph,
+    symbolIndex,
     evidence,
     limitations: [
       "This is bounded static repository analysis, not proof of runtime behavior.",
