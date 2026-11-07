@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
+import { mapRepositoryArchitecture } from "./rea.js";
 
 const server = new McpServer({ name: "engineering-agent", version: "0.1.0" });
 
@@ -18,6 +19,22 @@ server.registerTool("inspect_repository", {
     return { content: [{ type: "text", text: JSON.stringify(snapshot, null, 2) }] };
   } catch (error) {
     return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Repository inspection failed." }] };
+  }
+});
+
+server.registerTool("map_repository_architecture", {
+  title: "Map repository architecture",
+  description: "Perform bounded, read-only static analysis of a GitHub repository. Summarizes languages, project manifests, declared frameworks, directory layout and likely entrypoints. Distinguishes observed, documented and inferred evidence. Does not execute code.",
+  inputSchema: {
+    repository: z.string().min(1).max(500).describe("GitHub owner/name or HTTPS repository URL."),
+    max_files: z.number().int().min(10).max(200).optional()
+  }
+}, async ({ repository, max_files }) => {
+  try {
+    const report = await mapRepositoryArchitecture(repository, max_files ?? 120);
+    return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Repository architecture mapping failed." }] };
   }
 });
 
