@@ -326,7 +326,7 @@ export async function mapRepositoryArchitecture(input: string, maxFiles = 120) {
   }
 
   const sourceInputs: SourceInput[] = [];
-  const sourcePaths = snapshot.paths.filter((path) => /\\.(ts|tsx|js|jsx|mjs|cjs)$/i.test(path)).slice(0, 50);
+  const sourcePaths = snapshot.paths.filter((path) => /\.(ts|tsx|js|jsx|mjs|cjs)$/i.test(path)).slice(0, 50);
   for (const path of sourcePaths) {
     if (remainingBytes <= 0) break;
     try {
