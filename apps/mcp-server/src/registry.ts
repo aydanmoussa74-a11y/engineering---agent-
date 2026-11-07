@@ -50,11 +50,17 @@ export function registerSkillRegistryTools(server: McpServer, pool: Pool, tenant
         ]
       );
       const version = await client.query(
-        "SELECT content_sha256 FROM agent_skill_versions WHERE tenant_id=$1 AND skill_id=$2 AND version=$3",
+        "SELECT content_sha256,dependencies,requested_permissions,manifest FROM agent_skill_versions WHERE tenant_id=$1 AND skill_id=$2 AND version=$3",
         [tenantId, skillId, validation.manifest.version]
       );
-      if (version.rows[0]?.content_sha256 !== validation.contentSha256) {
-        throw new Error("That skill version already exists with different content. Increment the version before installing changed content.");
+      const storedVersion = version.rows[0];
+      if (
+        storedVersion?.content_sha256 !== validation.contentSha256 ||
+        JSON.stringify(storedVersion?.dependencies) !== JSON.stringify(validation.dependencies) ||
+        JSON.stringify(storedVersion?.requested_permissions) !== JSON.stringify(validation.requestedPermissions) ||
+        JSON.stringify(storedVersion?.manifest) !== JSON.stringify(validation.manifest)
+      ) {
+        throw new Error("That skill version already exists with different content or metadata. Increment the version before installing changed material.");
       }
       for (const permission of validation.requestedPermissions) {
         await client.query(
@@ -158,6 +164,12 @@ export function registerSkillRegistryTools(server: McpServer, pool: Pool, tenant
           [tenantId, skill_id, version, decision.scope, decision.decision, approved_by]
         );
         if (!updated.rowCount) throw new Error("Permission was not requested by this skill: " + decision.scope);
+        if (decision.decision === "rejected") {
+          await client.query(
+            "UPDATE agent_skills SET status='disabled',updated_at=now() WHERE tenant_id=$1 AND skill_id=$2",
+            [tenantId, skill_id]
+          );
+        }
         await client.query(
           "INSERT INTO agent_skill_events (tenant_id,skill_id,version,event_type,details) VALUES ($1,$2,$3,$4,$5::jsonb)",
           [tenantId, skill_id, version, decision.decision === "approved" ? "permission_approved" : "permission_rejected", JSON.stringify({ scope: decision.scope, approved_by })]
