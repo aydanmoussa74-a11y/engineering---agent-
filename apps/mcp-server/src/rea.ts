@@ -246,9 +246,9 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
   const frameworkSignals = [...new Set(manifests.flatMap((item) => item.frameworks))];
   const scriptedEntrypoints = manifests.flatMap((manifest) =>
     Object.entries(manifest.scriptCommands).flatMap(([script, command]) => {
-      const match = command.match(/\\b(?:tsx|ts-node|node|bun|deno\\s+run|python3?|uvicorn)\\s+([./A-Za-z0-9_@/-]+\\.(?:ts|tsx|js|jsx|mjs|cjs|py))\\b/);
+      const match = command.match(/\b(?:tsx|ts-node|node|bun|deno\s+run|python3?|uvicorn)\s+([./A-Za-z0-9_@/-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py))\b/);
       if (!match?.[1]) return [];
-      const target = match[1].replace(/^\\.\\//, "");
+      const target = match[1].replace(/^\.\//, "");
       return paths.includes(target) ? [{ path: target, script, manifestPath: manifest.path }] : [];
     })
   );
@@ -259,7 +259,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
     scriptByPath.set(item.path, entries);
   }
   const candidatePaths = new Set([
-    ...paths.filter((path) => /(^|\\/)(index|main|app|server|manage|cli)\\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|php|rb)$/i.test(path)),
+    ...paths.filter((path) => /(^|\/)(index|main|app|server|manage|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|php|rb)$/i.test(path)),
     ...scriptByPath.keys()
   ]);
   const incomingReferences = new Map<string, number>();
