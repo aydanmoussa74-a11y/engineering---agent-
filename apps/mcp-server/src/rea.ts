@@ -151,7 +151,7 @@ export function analyzeRepositoryStructure(paths: string[], manifestInputs: Mani
     const language = EXTENSION_LANGUAGES[extension];
     if (language) languageCounts.set(language, (languageCounts.get(language) ?? 0) + 1);
     const first = path.split("/")[0];
-    if (path.includes("/")) directoryCounts.set(first, (directoryCounts.get(first) ?? 0) + 1);
+    if (path.includes("/") && first) directoryCounts.set(first, (directoryCounts.get(first) ?? 0) + 1);
   }
 
   const manifests = manifestInputs.map(summarizeManifest).filter((item): item is ManifestSummary => item !== null);
