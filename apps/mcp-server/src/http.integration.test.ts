@@ -263,21 +263,45 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         task_id: workflowTaskId,
         decision: "approved",
         approved_by: "ci-integration-operator",
-        note: "Integration test approval."
+        note: "Initial integration test approval."
       });
-      await callTool(11, "advance_engineering_task", {
+      const duplicateApproval = await callTool(11, "record_task_approval", {
+        task_id: workflowTaskId,
+        decision: "rejected",
+        approved_by: "ci-integration-operator",
+        note: "A second decision must not overwrite the first."
+      });
+      expect(duplicateApproval.isError).toBe(true);
+
+      await callTool(12, "advance_engineering_task", {
         task_id: workflowTaskId,
         next_status: "executing",
         checkpoint: "Execution phase started.",
         current_step: "Implement",
         increment_attempt: true
       });
-      await callTool(12, "advance_engineering_task", {
+      await callTool(13, "advance_engineering_task", {
+        task_id: workflowTaskId,
+        next_status: "awaiting_approval",
+        checkpoint: "An additional scoped action requires approval."
+      });
+      await callTool(14, "record_task_approval", {
+        task_id: workflowTaskId,
+        decision: "approved",
+        approved_by: "ci-integration-operator",
+        note: "Second approval gate passed."
+      });
+      await callTool(15, "advance_engineering_task", {
+        task_id: workflowTaskId,
+        next_status: "executing",
+        checkpoint: "Resumed after the second approval gate."
+      });
+      await callTool(16, "advance_engineering_task", {
         task_id: workflowTaskId,
         next_status: "verifying",
         checkpoint: "Implementation checks are ready."
       });
-      const prematureCompletion = await callTool(13, "advance_engineering_task", {
+      const prematureCompletion = await callTool(17, "advance_engineering_task", {
         task_id: workflowTaskId,
         next_status: "completed",
         checkpoint: "Attempted completion without acceptance evidence.",
@@ -285,13 +309,13 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(prematureCompletion.isError).toBe(true);
 
-      await callTool(14, "advance_engineering_task", {
+      await callTool(18, "advance_engineering_task", {
         task_id: workflowTaskId,
         next_status: "completed",
         checkpoint: "All acceptance criteria passed.",
         result: { acceptance_criteria_met: true, checks: ["workflow-state", "approval-gate"] }
       });
-      const workflow = await callTool(15, "get_engineering_task", { task_id: workflowTaskId });
+      const workflow = await callTool(19, "get_engineering_task", { task_id: workflowTaskId });
       const workflowData = JSON.parse(workflow.content[0].text) as {
         task: { status: string; attempt_count: number; approval_state: string };
         recent_events: Array<{ event_type: string }>;
@@ -403,6 +427,19 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       };
       expect(checkpointData.task).toMatchObject({ task_id: taskId, status: "verifying" });
       expect(checkpointData.recent_events[0]?.status).toBe("verifying");
+
+      const revoked = await callTool(32, "record_skill_permission_decisions", {
+        skill_id: installedSkill.skill.skill_id,
+        version: "1.0.0",
+        decisions: [{ scope: "repository.read", decision: "rejected" }],
+        approved_by: "ci-integration-operator"
+      });
+      expect(revoked.isError).not.toBe(true);
+      const listedSkills = await callTool(33, "list_skills", {});
+      const skillRows = JSON.parse(listedSkills.content[0].text) as Array<{ skill_id: string; status: string }>;
+      expect(skillRows.find((skill) => skill.skill_id === installedSkill.skill.skill_id)?.status).toBe("disabled");
+      const disabledInstructions = await callTool(34, "read_skill_instructions", { skill_id: installedSkill.skill.skill_id });
+      expect(disabledInstructions.isError).toBe(true);
 
       const closed = await fetch(baseUrl + "/mcp", {
         method: "DELETE",
