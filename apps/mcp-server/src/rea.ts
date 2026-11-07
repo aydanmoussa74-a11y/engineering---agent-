@@ -198,8 +198,13 @@ export function analyzeImportGraph(paths: string[], sourceInputs: SourceInput[])
     incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
   }
   const connectedFiles = [...scanned].filter((path) => (incoming.get(path) ?? 0) + (outgoing.get(path) ?? 0) > 0);
-  const centralModules = [...scanned]
-    .map((path) => ({ path, incomingReferences: incoming.get(path) ?? 0, outgoingReferences: outgoing.get(path) ?? 0 }))
+  const centralModules = [...knownPaths]
+    .map((path) => ({
+      path,
+      scanned: scanned.has(path),
+      incomingReferences: incoming.get(path) ?? 0,
+      outgoingReferences: outgoing.get(path) ?? 0
+    }))
     .filter((item) => item.incomingReferences > 0 || item.outgoingReferences > 0)
     .sort((a, b) => b.incomingReferences - a.incomingReferences || (b.incomingReferences + b.outgoingReferences) - (a.incomingReferences + a.outgoingReferences) || a.path.localeCompare(b.path))
     .slice(0, 20);
