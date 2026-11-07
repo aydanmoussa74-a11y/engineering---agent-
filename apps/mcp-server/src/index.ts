@@ -50,8 +50,8 @@ server.registerTool("validate_skill_package", {
 }, async ({ content, requested_permissions, dependencies }) => {
   const result = validateSkillPackage({
     content,
-    requestedPermissions: requested_permissions,
-    dependencies
+    requestedPermissions: requested_permissions ?? [],
+    dependencies: dependencies ?? []
   });
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 });
