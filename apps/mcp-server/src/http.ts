@@ -1,7 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Pool } from "pg";
@@ -70,29 +68,12 @@ function withinRateLimit(req: IncomingMessage): boolean {
   return current.count <= 120;
 }
 
-async function applyMigrations() {
-  const directory = resolve(process.cwd(), "apps/mcp-server/migrations");
-  const files = (await readdir(directory)).filter((name) => /^\d+_[a-z0-9_-]+\.sql$/.test(name)).sort();
-  const client = await pool.connect();
-  try {
-    await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
-    for (const file of files) {
-      const alreadyApplied = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [file]);
-      if (alreadyApplied.rowCount) continue;
-      const sql = await readFile(resolve(directory, file), "utf8");
-      await client.query("BEGIN");
-      try {
-        await client.query(sql);
-        await client.query("INSERT INTO schema_migrations(version) VALUES ($1)", [file]);
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      }
-    }
-  } finally {
-    client.release();
-  }
+async function verifySchema() {
+  const result = await pool.query(
+    "SELECT 1 FROM schema_migrations WHERE version = $1",
+    ["001_initial_memory_and_tasks.sql"]
+  );
+  if (!result.rowCount) throw new Error("Required database migration is not applied.");
 }
 
 function makeMcpServer() {
@@ -274,7 +255,8 @@ const httpServer = createServer(async (req, res) => {
   }
 
   const server = makeMcpServer();
-  const transport = new StreamableHTTPServerTransport({
+  let transport!: StreamableHTTPServerTransport;
+  transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (id) => sessions.set(id, { server, transport })
   });
@@ -285,11 +267,6 @@ const httpServer = createServer(async (req, res) => {
     if (!res.headersSent) json(res, 500, { error: "Unable to initialize MCP session" });
     else res.end();
   }
-});
-
-httpServer.listen(port, "0.0.0.0", () => {
-  // Render health checks use /health. Avoid logging environment or secrets.
-  process.stdout.write("Engineering Agent HTTP runtime listening on port " + port + "\n");
 });
 
 async function shutdown() {
@@ -303,7 +280,8 @@ async function shutdown() {
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
 
-void applyMigrations().catch((error) => {
-  process.stderr.write("Database migration failed: " + (error instanceof Error ? error.message : "unknown error") + "\n");
-  process.exit(1);
+await verifySchema();
+httpServer.listen(port, "0.0.0.0", () => {
+  // Render health checks use /health. Avoid logging environment or secrets.
+  process.stdout.write("Engineering Agent HTTP runtime listening on port " + port + "\\n");
 });
