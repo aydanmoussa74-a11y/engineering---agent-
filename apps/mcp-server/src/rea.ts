@@ -146,7 +146,7 @@ function summarizeManifest(input: ManifestInput): ManifestSummary | null {
 type SourceInput = { path: string; content: string };
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
-const IMPORT_PATTERN = /(?:\\bimport\\s+(?:[^"'()]*?\\s+from\\s*)?|\\bexport\\s+[^"'()]*?\\s+from\\s*|\\bimport\\s*\\(|\\brequire\\s*\\()(["'])([^"']+)\\1\\s*\\)?/g;
+const IMPORT_PATTERN = /(?:\bimport\s+(?:[^"'()]*?\s+from\s*)?|\bexport\s+[^"'()]*?\s+from\s*|\bimport\s*\(|\brequire\s*\()(["'])([^"']+)\1\s*\)?/g;
 
 function resolveRelativeImport(fromPath: string, specifier: string, knownPaths: Set<string>): string | null {
   const parts = fromPath.split("/");
