@@ -4,8 +4,18 @@ import { z } from "zod";
 import { inspectRepository, readRepositoryFile } from "./github.js";
 import { mapRepositoryArchitecture } from "./rea.js";
 import { validateSkillPackage } from "./skills.js";
+import { Pool } from "pg";
+import { registerSkillRegistryTools } from "./registry.js";
+import { registerTaskTools } from "./tasks.js";
 
-const server = new McpServer({ name: "engineering-agent", version: "0.1.0" });
+const server = new McpServer({ name: "engineering-agent", version: "0.2.0" });
+const databaseUrl = process.env.DATABASE_URL ?? "";
+const tenantId = process.env.AGENT_TENANT_ID ?? "primary";
+const pool = databaseUrl ? new Pool({ connectionString: databaseUrl, max: 5, idleTimeoutMillis: 30_000 }) : null;
+if (pool) {
+  registerSkillRegistryTools(server, pool, tenantId);
+  registerTaskTools(server, pool, tenantId);
+}
 
 server.registerTool("inspect_repository", {
   title: "Inspect GitHub repository",
