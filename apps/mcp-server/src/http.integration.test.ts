@@ -168,7 +168,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       }
 
       const validatedSkill = await callTool(3, "validate_skill_package", {
-        content: "---\\nname: ci-sample-skill\\nversion: 1.0.0\\ndescription: CI validation sample\\n---\\n\\nRead-only test skill."
+        content: "---\nname: ci-sample-skill\nversion: 1.0.0\ndescription: CI validation sample\n---\n\nRead-only test skill."
       });
       const skillReport = JSON.parse(validatedSkill.content[0].text) as {
         valid: boolean;
