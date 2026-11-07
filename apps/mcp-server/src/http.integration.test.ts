@@ -151,7 +151,8 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         "save_project_memory",
         "search_project_memory",
         "save_task_checkpoint",
-        "get_task_checkpoint"
+        "get_task_checkpoint",
+        "validate_skill_package"
       ]));
 
       async function callTool(id: number, name: string, args: Record<string, unknown>) {
@@ -166,8 +167,22 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         return result.body?.result;
       }
 
+      const validatedSkill = await callTool(3, "validate_skill_package", {
+        content: "---\\nname: ci-sample-skill\\nversion: 1.0.0\\ndescription: CI validation sample\\n---\\n\\nRead-only test skill."
+      });
+      const skillReport = JSON.parse(validatedSkill.content[0].text) as {
+        valid: boolean;
+        executionEnabled: boolean;
+        permissionsGranted: string[];
+      };
+      expect(skillReport).toMatchObject({
+        valid: true,
+        executionEnabled: false,
+        permissionsGranted: []
+      });
+
       const projectId = "integration-project-" + randomUUID();
-      const savedMemory = await callTool(3, "save_project_memory", {
+      const savedMemory = await callTool(4, "save_project_memory", {
         project_id: projectId,
         kind: "architecture_decision",
         content: "Integration test verifies repository architecture memory persistence.",
@@ -176,7 +191,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(savedMemory?.isError).not.toBe(true);
 
-      const searchedMemory = await callTool(4, "search_project_memory", {
+      const searchedMemory = await callTool(5, "search_project_memory", {
         project_id: projectId,
         query: "repository architecture",
         limit: 5
@@ -190,14 +205,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       ]));
 
       const taskId = "integration-task-" + randomUUID();
-      await callTool(5, "save_task_checkpoint", {
+      await callTool(6, "save_task_checkpoint", {
         task_id: taskId,
         project_id: projectId,
         goal: "Verify remote MCP persistence",
         status: "verifying",
         checkpoint: "Memory and task tools are connected to the test database."
       });
-      const checkpoint = await callTool(6, "get_task_checkpoint", { task_id: taskId });
+      const checkpoint = await callTool(7, "get_task_checkpoint", { task_id: taskId });
       const checkpointData = JSON.parse(checkpoint.content[0].text) as {
         task: { task_id: string; status: string };
         recent_events: Array<{ status: string }>;
