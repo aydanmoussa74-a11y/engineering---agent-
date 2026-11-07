@@ -283,5 +283,5 @@ process.on("SIGINT", () => void shutdown());
 await verifySchema();
 httpServer.listen(port, "0.0.0.0", () => {
   // Render health checks use /health. Avoid logging environment or secrets.
-  process.stdout.write("Engineering Agent HTTP runtime listening on port " + port + "\\n");
+  process.stdout.write("Engineering Agent HTTP runtime listening on port " + port + "\n");
 });
