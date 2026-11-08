@@ -11,6 +11,7 @@ import { registerSkillRegistryTools } from "./registry.js";
 import { registerTaskTools } from "./tasks.js";
 import { registerResearchTools } from "./research.js";
 import { registerBlackBoxTools } from "./blackbox.js";
+import { registerChangeProposalTools } from "./proposals.js";
 import { createFixedWindowRateLimiter, isAllowedHost, isAuthorizedBearer } from "./security.js";
 
 
@@ -66,7 +67,7 @@ function json(res: ServerResponse, status: number, body: unknown) {
 async function verifySchema() {
   const result = await pool.query(
     "SELECT 1 FROM schema_migrations WHERE version = $1",
-    ["003_evidence_research_workspace.sql"]
+    ["004_change_proposals.sql"]
   );
   if (!result.rowCount) throw new Error("Required database migration is not applied.");
 }
@@ -78,6 +79,7 @@ function makeMcpServer() {
   registerTaskTools(server, pool, tenantId);
   registerResearchTools(server, pool, tenantId);
   registerBlackBoxTools(server);
+  registerChangeProposalTools(server, pool, tenantId);
 
   server.registerTool("inspect_repository", {
     title: "Inspect GitHub repository",
