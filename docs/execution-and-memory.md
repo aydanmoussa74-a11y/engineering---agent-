@@ -1,6 +1,6 @@
 # Persistent execution and project memory
 
-Status: **durable task state machine and checkpoint persistence implemented**. The isolated execution backend, task-scoped change proposals, sandboxing and automated repair remain future work.
+Status: **durable task state machine, checkpoint persistence and task-scoped change proposals implemented**. The isolated execution backend, sandboxing and automated repair remain future work.
 
 ## Implemented task lifecycle
 
@@ -21,6 +21,16 @@ MCP operations:
 - Existing `save_task_checkpoint` and `get_task_checkpoint`
 
 The transition tool validates legal state changes, blocks execution while approval is pending or rejected, enforces the retry limit, and requires explicit acceptance evidence before completion when acceptance criteria exist.
+
+## Task-scoped change proposals
+
+The remote and stdio MCP servers expose:
+- `create_change_proposal`: stores a bounded patch against a repository, branch and exact 40-character base commit.
+- `get_change_proposal`: retrieves the patch and recomputes its SHA-256 integrity hash.
+- `list_change_proposals`: lists recent proposals within the tenant scope.
+- `decide_change_proposal`: records one approval or rejection before expiry.
+
+Proposals are limited to 100 KB and 50 declared paths. Standard diff headers must match the declared paths exactly; traversal, absolute paths, duplicate paths, `.git` and `node_modules` are rejected. Approval binds only to the stored patch hash and base context. It is not an apply token: no repository write, command execution or sandbox capability is currently exposed. A real executor must re-check the branch head and patch hash at apply time and use a separate isolated runtime.
 
 ## Execution loop still required
 
