@@ -41,9 +41,14 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       new URL("../migrations/003_evidence_research_workspace.sql", import.meta.url),
       "utf8"
     );
+    const proposalMigration = await readFile(
+      new URL("../migrations/004_change_proposals.sql", import.meta.url),
+      "utf8"
+    );
     await database.query(initialMigration);
     await database.query(workflowMigration);
     await database.query(researchMigration);
+    await database.query(proposalMigration);
 
     const portProbe = createNetServer();
     await new Promise<void>((resolve, reject) => {
@@ -181,7 +186,11 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         "record_research_claim",
         "update_research_synthesis",
         "get_research_brief",
-        "analyze_captured_web_surface"
+        "analyze_captured_web_surface",
+        "create_change_proposal",
+        "decide_change_proposal",
+        "get_change_proposal",
+        "list_change_proposals"
       ]));
 
       async function callTool(id: number, name: string, args: Record<string, unknown>) {
@@ -210,6 +219,57 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         document: { title: "Captured test" }
       });
       expect(capturedReport.routeCandidates).toContain("/docs");
+
+      const proposal = await callTool(36, "create_change_proposal", {
+        project_id: "proposal-project",
+        repository: "example/project",
+        branch_name: "feat/scoped-change",
+        base_commit: "0123456789abcdef0123456789abcdef01234567",
+        patch: "diff --git a/src/example.ts b/src/example.ts\\n+export const ready = true;\\n",
+        changed_paths: ["src/example.ts"],
+        proposed_checks: ["pnpm test"],
+        expires_in_minutes: 60
+      });
+      const proposalData = JSON.parse(proposal.content[0].text) as {
+        proposal_id: string; status: string; patch_sha256: string; apply_capability: boolean;
+      };
+      expect(proposalData).toMatchObject({ status: "pending", apply_capability: false });
+      expect(proposalData.patch_sha256).toMatch(/^[a-f0-9]{64}$/);
+
+      const unsafeProposal = await callTool(37, "create_change_proposal", {
+        project_id: "proposal-project",
+        repository: "example/project",
+        branch_name: "feat/scoped-change",
+        base_commit: "0123456789abcdef0123456789abcdef01234567",
+        patch: "unsafe",
+        changed_paths: ["../secrets.txt"]
+      });
+      expect(unsafeProposal.isError).toBe(true);
+
+      const approvedProposal = await callTool(38, "decide_change_proposal", {
+        proposal_id: proposalData.proposal_id,
+        decision: "approved",
+        decided_by: "ci-integration-operator",
+        note: "Approve this exact patch for a later isolated apply stage."
+      });
+      expect(JSON.parse(approvedProposal.content[0].text)).toMatchObject({
+        status: "approved", applied: false, execution_enabled: false,
+        approval_scope: "exact_patch_and_base_only"
+      });
+
+      const duplicateProposalDecision = await callTool(39, "decide_change_proposal", {
+        proposal_id: proposalData.proposal_id,
+        decision: "rejected",
+        decided_by: "ci-integration-operator"
+      });
+      expect(duplicateProposalDecision.isError).toBe(true);
+
+      const retrievedProposal = await callTool(40, "get_change_proposal", { proposal_id: proposalData.proposal_id });
+      expect(JSON.parse(retrievedProposal.content[0].text)).toMatchObject({
+        status: "approved", patch_integrity: "verified", applied: false
+      });
+      const proposalList = await callTool(41, "list_change_proposals", { project_id: "proposal-project", status: "approved" });
+      expect(JSON.parse(proposalList.content[0].text)).toHaveLength(1);
 
       const validatedSkill = await callTool(3, "validate_skill_package", {
         content: "---\nname: ci-sample-skill\nversion: 1.0.0\ndescription: CI validation sample\n---\n\nRead-only test skill."
