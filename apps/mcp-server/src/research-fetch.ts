@@ -33,7 +33,7 @@ function isPublicAddress(address: string): boolean {
   return false;
 }
 
-function normalizeTarget(value: string): URL {
+export function normalizeResearchTarget(value: string): URL {
   const url = new URL(value);
   if (url.protocol !== "https:") throw new Error("Only HTTPS research sources are allowed.");
   if (url.username || url.password) throw new Error("URLs with embedded credentials are not allowed.");
@@ -112,7 +112,7 @@ function requestText(url: URL, address: string, family: number): Promise<{ statu
 }
 
 export async function fetchPublicResearchText(input: string): Promise<{ finalUrl: string; status: number; contentType: string; body: string }> {
-  let target = normalizeTarget(input);
+  let target = normalizeResearchTarget(input);
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
     const pinned = await resolvePinnedAddress(target.hostname);
     const result = await requestText(target, pinned.address, pinned.family);
@@ -120,7 +120,7 @@ export async function fetchPublicResearchText(input: string): Promise<{ finalUrl
       return { finalUrl: target.toString(), status: result.status, contentType: result.contentType, body: result.body };
     }
     if (redirects === MAX_REDIRECTS) throw new Error("Research source exceeded the redirect limit.");
-    target = normalizeTarget(new URL(result.location, target).toString());
+    target = normalizeResearchTarget(new URL(result.location, target).toString());
   }
   throw new Error("Research source redirect handling failed.");
 }
