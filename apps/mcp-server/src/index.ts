@@ -11,6 +11,7 @@ import { registerResearchTools } from "./research.js";
 import { registerResearchFetchTools } from "./research-fetch-tools.js";
 import { registerBlackBoxTools } from "./blackbox.js";
 import { registerChangeProposalTools } from "./proposals.js";
+import { registerExecutionTools } from "./execution.js";
 
 const server = new McpServer({ name: "engineering-agent", version: "0.2.0" });
 const databaseUrl = process.env.DATABASE_URL ?? "";
@@ -23,6 +24,7 @@ if (pool) {
   registerResearchFetchTools(server, pool, tenantId);
   registerBlackBoxTools(server);
   registerChangeProposalTools(server, pool, tenantId);
+  registerExecutionTools(server, pool, tenantId);
 }
 
 server.registerTool("inspect_repository", {
