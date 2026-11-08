@@ -1,0 +1,111 @@
+name: Omen Execution Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: Durable Omen task identifier for traceability
+        required: true
+        type: string
+      ref:
+        description: Branch or commit in this repository to verify
+        required: true
+        default: main
+        type: string
+  push:
+    branches:
+      - main
+      - feat/remote-mcp-neon-runtime
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omen-checks-${{ github.event.inputs.task_id || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Isolated repository verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TASK_ID: ${{ github.event.inputs.task_id || 'ci' }}
+      TARGET_REF: ${{ github.event.inputs.ref || github.sha }}
+    steps:
+      - name: Validate dispatch inputs
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$TASK_ID" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+            echo "Invalid task_id format" >&2
+            exit 1
+          fi
+          if [[ ! "$TARGET_REF" =~ ^[A-Za-z0-9._/-]{1,200}$ ]] || [[ "$TARGET_REF" == *".."* ]] || [[ "$TARGET_REF" == /* ]] || [[ "$TARGET_REF" == *"//"* ]]; then
+            echo "Invalid ref format" >&2
+            exit 1
+          fi
+
+      - name: Checkout requested repository revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ''
+
+      - name: Enable pinned pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run bounded verification suite
+        id: verify
+        shell: bash
+        run: |
+          set +e
+          pnpm typecheck
+          TYPECHECK_EXIT=$?
+          pnpm test
+          TEST_EXIT=$?
+          pnpm build
+          BUILD_EXIT=$?
+          set -e
+          mkdir -p omen-evidence
+          cat > omen-evidence/result.json <<EOF
+          {
+            "task_id": "$TASK_ID",
+            "repository": "$GITHUB_REPOSITORY",
+            "commit": "$GITHUB_SHA",
+            "checked_out_ref": "$TARGET_REF",
+            "runner": "github-hosted-ubuntu-latest",
+            "typecheck_exit_code": $TYPECHECK_EXIT,
+            "test_exit_code": $TEST_EXIT,
+            "build_exit_code": $BUILD_EXIT,
+            "success": $(( TYPECHECK_EXIT == 0 && TEST_EXIT == 0 && BUILD_EXIT == 0 ? 1 : 0 ))
+          }
+          EOF
+          if [[ "$TYPECHECK_EXIT" -ne 0 || "$TEST_EXIT" -ne 0 || "$BUILD_EXIT" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omen-verification-${{ github.run_id }}
+          path: omen-evidence/result.json
+          if-no-files-found: ignore
+          retention-days: 7
