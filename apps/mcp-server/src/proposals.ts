@@ -39,7 +39,7 @@ export function registerChangeProposalTools(server: McpServer, pool: Pool, tenan
     try {
       if (branch_name.startsWith("/") || branch_name.endsWith("/") || branch_name.includes("..") || branch_name.includes("//")) throw new Error("Invalid branch name.");
       const paths = validatePaths(changed_paths);
-      const diffPaths = [...patch.matchAll(/^diff --git a\\/([^\\s]+) b\\/([^\\s]+)$/gm)]
+      const diffPaths = [...patch.matchAll(/^diff --git a\/([^\s]+) b\/([^\s]+)$/gm)]
         .map((match) => ({ before: match[1]!, after: match[2]! }));
       if (diffPaths.length === 0) throw new Error("Patch must contain standard diff --git headers.");
       const declared = new Set(paths);
