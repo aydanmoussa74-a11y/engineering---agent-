@@ -9,6 +9,7 @@ import { registerSkillRegistryTools } from "./registry.js";
 import { registerTaskTools } from "./tasks.js";
 import { registerResearchTools } from "./research.js";
 import { registerBlackBoxTools } from "./blackbox.js";
+import { registerChangeProposalTools } from "./proposals.js";
 
 const server = new McpServer({ name: "engineering-agent", version: "0.2.0" });
 const databaseUrl = process.env.DATABASE_URL ?? "";
@@ -19,6 +20,7 @@ if (pool) {
   registerTaskTools(server, pool, tenantId);
   registerResearchTools(server, pool, tenantId);
   registerBlackBoxTools(server);
+  registerChangeProposalTools(server, pool, tenantId);
 }
 
 server.registerTool("inspect_repository", {
