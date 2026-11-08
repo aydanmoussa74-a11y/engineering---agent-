@@ -1,4 +1,5 @@
 name: Omen Execution Checks
+run-name: Omen task ${{ inputs.task_id || 'CI' }}
 
 on:
   workflow_dispatch:
@@ -84,11 +85,12 @@ jobs:
           BUILD_EXIT=$?
           set -e
           mkdir -p omen-evidence
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
           cat > omen-evidence/result.json <<EOF
           {
             "task_id": "$TASK_ID",
             "repository": "$GITHUB_REPOSITORY",
-            "commit": "$GITHUB_SHA",
+            "commit": "$CHECKED_OUT_SHA",
             "checked_out_ref": "$TARGET_REF",
             "runner": "github-hosted-ubuntu-latest",
             "typecheck_exit_code": $TYPECHECK_EXIT,
