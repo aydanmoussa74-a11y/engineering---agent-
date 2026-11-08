@@ -10,6 +10,7 @@ import { validateSkillPackage } from "./skills.js";
 import { registerSkillRegistryTools } from "./registry.js";
 import { registerTaskTools } from "./tasks.js";
 import { registerResearchTools } from "./research.js";
+import { registerResearchFetchTools } from "./research-fetch-tools.js";
 import { registerBlackBoxTools } from "./blackbox.js";
 import { registerChangeProposalTools } from "./proposals.js";
 import { createFixedWindowRateLimiter, isAllowedHost, isAuthorizedBearer } from "./security.js";
@@ -78,6 +79,7 @@ function makeMcpServer() {
   registerSkillRegistryTools(server, pool, tenantId);
   registerTaskTools(server, pool, tenantId);
   registerResearchTools(server, pool, tenantId);
+  registerResearchFetchTools(server, pool, tenantId);
   registerBlackBoxTools(server);
   registerChangeProposalTools(server, pool, tenantId);
 
