@@ -1,6 +1,6 @@
 # REA and deep research engine
 
-Status: **initial source REA and evidence research workspace implemented**. Black-box application analysis and automatic research discovery remain future work.
+Status: **source REA, evidence research workspace and offline HTML-capture analysis implemented**. Live browser-based application analysis and automatic research discovery remain future work.
 
 ## Source REA implemented
 
@@ -14,6 +14,14 @@ The repository architecture mapper currently provides:
 - Lexical cross-file symbol references.
 
 These are static heuristics, not compiler-accurate call graphs. Alias resolution, package exports, generated code, non-JS/TS languages, overloads and runtime behaviour may be missed. Reports must retain those limitations.
+
+## Offline black-box HTML capture analysis implemented
+
+MCP operation: `analyze_captured_web_surface`.
+
+Accepts a user-supplied HTML snapshot (maximum 500 KB) and optionally a source URL used only to resolve relative links. Extracts document title/description, headings, anchor links and route candidates, form actions and fields, image/script/stylesheet references, semantic landmarks and external origins. It also labels the capture-derived observations and route inferences, and returns explicit limitations.
+
+This analyzer is intentionally offline. It does not fetch the supplied URL, execute JavaScript, load assets, authenticate, click controls or observe runtime API behaviour. The source URL is parsing context only, not a network destination.
 
 ## Evidence research workspace implemented
 
@@ -30,7 +38,7 @@ These tools **store and validate evidence supplied by the caller**. They do not 
 
 ## Remaining REA modes
 
-### Black-box application REA
+### Live black-box application REA
 - Map screens, navigation, user journeys, states, inputs, outputs and integrations from authorised public pages, documented APIs, screenshots, recordings or explicitly authorised test accounts.
 - Distinguish observed behaviour from inferred internal implementation.
 - Do not bypass authentication, paywalls, access controls or technical restrictions.
