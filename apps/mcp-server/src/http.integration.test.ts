@@ -225,7 +225,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         repository: "example/project",
         branch_name: "feat/scoped-change",
         base_commit: "0123456789abcdef0123456789abcdef01234567",
-        patch: "diff --git a/src/example.ts b/src/example.ts\\n+export const ready = true;\\n",
+        patch: "diff --git a/src/example.ts b/src/example.ts\n+export const ready = true;\n",
         changed_paths: ["src/example.ts"],
         proposed_checks: ["pnpm test"],
         expires_in_minutes: 60
@@ -251,7 +251,7 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         repository: "example/project",
         branch_name: "feat/scoped-change",
         base_commit: "0123456789abcdef0123456789abcdef01234567",
-        patch: "diff --git a/src/other.ts b/src/other.ts\\n+export const unsafe = true;\\n",
+        patch: "diff --git a/src/other.ts b/src/other.ts\n+export const unsafe = true;\n",
         changed_paths: ["src/example.ts"]
       });
       expect(mismatchedPatch.isError).toBe(true);
