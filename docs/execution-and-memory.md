@@ -1,6 +1,6 @@
 # Persistent execution and project memory
 
-Status: **durable task state machine and checkpoint persistence implemented**. Autonomous execution, sandboxing and repair remain future work.
+Status: **durable task state machine and checkpoint persistence implemented**. The isolated execution backend, task-scoped change proposals, sandboxing and automated repair remain future work.
 
 ## Implemented task lifecycle
 
