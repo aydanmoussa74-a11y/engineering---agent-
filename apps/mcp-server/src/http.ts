@@ -13,6 +13,7 @@ import { registerResearchTools } from "./research.js";
 import { registerResearchFetchTools } from "./research-fetch-tools.js";
 import { registerBlackBoxTools } from "./blackbox.js";
 import { registerChangeProposalTools } from "./proposals.js";
+import { registerExecutionTools } from "./execution.js";
 import { createFixedWindowRateLimiter, isAllowedHost, isAuthorizedBearer } from "./security.js";
 
 
@@ -82,6 +83,7 @@ function makeMcpServer() {
   registerResearchFetchTools(server, pool, tenantId);
   registerBlackBoxTools(server);
   registerChangeProposalTools(server, pool, tenantId);
+  registerExecutionTools(server, pool, tenantId);
 
   server.registerTool("inspect_repository", {
     title: "Inspect GitHub repository",
