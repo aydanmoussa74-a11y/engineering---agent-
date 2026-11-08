@@ -180,7 +180,8 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         "save_research_source",
         "record_research_claim",
         "update_research_synthesis",
-        "get_research_brief"
+        "get_research_brief",
+        "analyze_captured_web_surface"
       ]));
 
       async function callTool(id: number, name: string, args: Record<string, unknown>) {
@@ -194,6 +195,21 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
         expect(result.body?.error, "MCP tool call should not return a protocol error").toBeUndefined();
         return result.body?.result;
       }
+
+      const capturedSurface = await callTool(35, "analyze_captured_web_surface", {
+        html: '<html><head><title>Captured test</title></head><body><main><h1>Captured page</h1><a href="/docs">Docs</a></main></body></html>',
+        source_url: "https://capture.example.test/"
+      });
+      const capturedReport = JSON.parse(capturedSurface.content[0].text) as {
+        analysisMode: string;
+        document: { title: string };
+        routeCandidates: string[];
+      };
+      expect(capturedReport).toMatchObject({
+        analysisMode: "offline_user_supplied_capture",
+        document: { title: "Captured test" }
+      });
+      expect(capturedReport.routeCandidates).toContain("/docs");
 
       const validatedSkill = await callTool(3, "validate_skill_package", {
         content: "---\nname: ci-sample-skill\nversion: 1.0.0\ndescription: CI validation sample\n---\n\nRead-only test skill."
