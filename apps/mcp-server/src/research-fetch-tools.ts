@@ -41,7 +41,7 @@ export function registerResearchFetchTools(server: McpServer, pool: Pool, tenant
           [tenantId, research_id, fetched.finalUrl, title, publisher, source_type, document.excerpt, "Fetched automatically; HTTP status " + fetched.status + "; content type " + fetched.contentType + ". Publisher authority has not been verified.", hash]
         );
         await client.query(
-          "INSERT INTO research_events (tenant_id,research_id,event_type,details) VALUES ($1,$2,'source_fetched',$3::jsonb)",
+          "INSERT INTO research_events (tenant_id,research_id,event_type,details) VALUES ($1,$2,'source_added',$3::jsonb)",
           [tenantId, research_id, JSON.stringify({ source_id: saved.rows[0].source_id, url: fetched.finalUrl, status: fetched.status, content_type: fetched.contentType })]
         );
         await client.query("UPDATE research_briefs SET updated_at=now() WHERE tenant_id=$1 AND research_id=$2", [tenantId, research_id]);
