@@ -1,6 +1,6 @@
 # Persistent execution and project memory
 
-Status: **durable task state machine, checkpoint persistence and task-scoped change proposals implemented**. The isolated execution backend, sandboxing and automated repair remain future work.
+Status: **durable task state machine, checkpoint persistence, task-scoped change proposals, and a bounded GitHub Actions verification provider scaffold implemented**. MCP dispatch/status tools are present, but live dispatch remains gated on merging the workflow into the default branch and configuring a least-privilege GitHub Actions token as a Render secret. General-purpose isolated code execution, sandboxing and automated repair remain future work.
 
 ## Implemented task lifecycle
 
