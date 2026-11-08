@@ -1,6 +1,6 @@
 # REA and deep research engine
 
-Status: **source REA, evidence research workspace and offline HTML-capture analysis implemented**. Live browser-based application analysis and automatic research discovery remain future work.
+Status: **source REA, evidence research workspace, bounded public-source fetching and live static-HTML analysis implemented**. Search-engine discovery and browser-based application analysis remain future work.
 
 ## Source REA implemented
 
@@ -15,6 +15,14 @@ The repository architecture mapper currently provides:
 
 These are static heuristics, not compiler-accurate call graphs. Alias resolution, package exports, generated code, non-JS/TS languages, overloads and runtime behaviour may be missed. Reports must retain those limitations.
 
+## Live static-HTML black-box analysis implemented
+
+MCP operation: `analyze_live_html_surface`.
+
+For a site the caller owns or is authorised to inspect, this operation fetches the current public HTML over HTTPS and passes the bounded response to the same structural analyzer. The fetcher validates DNS results, rejects private/reserved destinations and IP-literal URLs, pins the HTTPS connection to a validated public address, revalidates each redirect, allows at most five redirects, enforces a 10-second total request deadline and caps response bodies at 1 MB. Only text-like response types are accepted. The tool requires an explicit `authorized_to_inspect: true` confirmation.
+
+This is a live HTTP HTML snapshot, **not a browser session**. JavaScript is not executed; authenticated content, hydration, network calls, interaction states and runtime behaviour are not observed. Do not describe it as full dynamic reverse engineering.
+
 ## Offline black-box HTML capture analysis implemented
 
 MCP operation: `analyze_captured_web_surface`.
@@ -23,7 +31,7 @@ Accepts a user-supplied HTML snapshot (maximum 500 KB) and optionally a source U
 
 This analyzer is intentionally offline. It does not fetch the supplied URL, execute JavaScript, load assets, authenticate, click controls or observe runtime API behaviour. The source URL is parsing context only, not a network destination.
 
-## Evidence research workspace implemented
+## Evidence research workspace and source fetching implemented
 
 MCP operations:
 - `create_research_brief`, `list_research_briefs`
@@ -31,10 +39,11 @@ MCP operations:
 - `record_research_claim`
 - `update_research_synthesis`
 - `get_research_brief`
+- `fetch_research_source`
 
 Sources record URL, title, publisher, type, authority classification, bounded excerpt, notes, publication/access dates and excerpt hash. Claims record classification (`observed`, `documented`, `inferred`, `unverified`), confidence, cited source IDs and rationale. Documented/observed claims require saved evidence. A brief cannot be marked completed without a synthesis, at least one source and at least one classified claim.
 
-These tools **store and validate evidence supplied by the caller**. They do not fetch URLs, search the web or verify publisher identity. The caller must research sources through an authorised search/browser tool and then record them.
+`fetch_research_source` retrieves one caller-supplied public HTTPS URL using the bounded fetcher above, extracts a readable excerpt, hashes it and stores it in the selected research brief. It does not discover URLs from a search query or crawl a site. Automatically fetched sources are always marked `unverified`; publisher identity and authority must be reviewed before claims rely on them. The remaining research tools store and validate caller-supplied claims and synthesis. No source content is treated as instructions.
 
 ## Remaining REA modes
 
