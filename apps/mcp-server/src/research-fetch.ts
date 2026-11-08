@@ -6,7 +6,7 @@ const MAX_BYTES = 1_000_000;
 const MAX_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-function isPublicAddress(address: string): boolean {
+export function isPublicAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) {
     const parts = address.split(".").map(Number);
@@ -26,9 +26,12 @@ function isPublicAddress(address: string): boolean {
     const normalized = address.toLowerCase();
     if (normalized.startsWith("::ffff:")) return false;
     // Globally routable IPv6 unicast is within 2000::/3; exclude documentation space.
-    return normalized.startsWith("2") || normalized.startsWith("3")
-      ? !normalized.startsWith("2001:db8:")
-      : false;
+    return (normalized.startsWith("2") || normalized.startsWith("3"))
+      && !normalized.startsWith("2001:db8:")
+      && !normalized.startsWith("2001:10:")
+      && !normalized.startsWith("2001:20:")
+      && !normalized.startsWith("2002:")
+      && !normalized.startsWith("2001:0000:");
   }
   return false;
 }
@@ -105,7 +108,8 @@ function requestText(url: URL, address: string, family: number): Promise<{ statu
       response.on("end", () => resolve({ status, contentType, body: Buffer.concat(chunks).toString("utf8") }));
       response.on("error", reject);
     });
-    request.setTimeout(REQUEST_TIMEOUT_MS, () => request.destroy(new Error("Research source request timed out.")));
+    const deadline = setTimeout(() => request.destroy(new Error("Research source request exceeded the 10-second total deadline.")), REQUEST_TIMEOUT_MS);
+    request.once("close", () => clearTimeout(deadline));
     request.on("error", reject);
     request.end();
   });
