@@ -1,6 +1,6 @@
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
-import { lookup as dnsLookup } from "node:dns";
+import { lookup as dnsLookup } from "node:dns/promises";
 
 const MAX_BYTES = 1_000_000;
 const MAX_REDIRECTS = 5;
