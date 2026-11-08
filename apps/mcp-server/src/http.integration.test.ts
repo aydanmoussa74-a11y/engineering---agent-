@@ -246,6 +246,16 @@ describe.skipIf(!enabled)("remote MCP HTTP integration", () => {
       });
       expect(unsafeProposal.isError).toBe(true);
 
+      const mismatchedPatch = await callTool(42, "create_change_proposal", {
+        project_id: "proposal-project",
+        repository: "example/project",
+        branch_name: "feat/scoped-change",
+        base_commit: "0123456789abcdef0123456789abcdef01234567",
+        patch: "diff --git a/src/other.ts b/src/other.ts\\n+export const unsafe = true;\\n",
+        changed_paths: ["src/example.ts"]
+      });
+      expect(mismatchedPatch.isError).toBe(true);
+
       const approvedProposal = await callTool(38, "decide_change_proposal", {
         proposal_id: proposalData.proposal_id,
         decision: "approved",
