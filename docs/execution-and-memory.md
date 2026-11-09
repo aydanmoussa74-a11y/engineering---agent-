@@ -1,63 +1,69 @@
 # Persistent execution and project memory
 
-Status: required product capabilities; detailed persistence and runtime choices remain open.
+Status: **durable task state machine, checkpoint persistence, task-scoped change proposals, and a bounded GitHub Actions verification provider scaffold implemented**. MCP dispatch/status tools are present, but live dispatch remains gated on merging the workflow into the default branch and configuring a least-privilege GitHub Actions token as a Render secret. General-purpose isolated code execution, sandboxing and automated repair remain future work.
 
-## Persistent task lifecycle
+## Implemented task lifecycle
 
-A task must survive process restarts and interrupted conversations. Proposed lifecycle:
+Tasks persist:
+- Goal and project scope.
+- Ordered plan and acceptance criteria.
+- Status, current step and checkpoint.
+- Approval state and decision history.
+- Attempt count and configured retry ceiling.
+- Block reason, verification result, start/completion timestamps.
+- Append-only task event history with metadata.
 
-queued → investigating → planning → awaiting_approval → executing → verifying → completed
+MCP operations:
+- `create_engineering_task`
+- `record_task_approval`
+- `advance_engineering_task`
+- `get_engineering_task`
+- Existing `save_task_checkpoint` and `get_task_checkpoint`
 
-Additional states: paused, blocked, failed, cancelled.
+The transition tool validates legal state changes, blocks execution while approval is pending or rejected, enforces the retry limit, and requires explicit acceptance evidence before completion when acceptance criteria exist.
 
-Every transition records a timestamp, reason, task revision, and evidence pointer. The agent must be able to retrieve task status, resume eligible work, pause, and cancel.
+## Task-scoped change proposals
 
-## Execution loop
+The remote and stdio MCP servers expose:
+- `create_change_proposal`: stores a bounded patch against a repository, branch and exact 40-character base commit.
+- `get_change_proposal`: retrieves the patch and recomputes its SHA-256 integrity hash.
+- `list_change_proposals`: lists recent proposals within the tenant scope.
+- `decide_change_proposal`: records one approval or rejection before expiry.
 
-1. Re-read the task goal, acceptance criteria, current state, and latest checkpoint.
-2. Select the next bounded action.
-3. Check tool capability and policy.
-4. Obtain any required task-scoped approval.
-5. Execute in an isolated workspace with resource limits.
-6. Capture outputs, changed files, exit codes, and logs with secret redaction.
-7. Run relevant checks and inspect failures.
-8. Diagnose and make bounded repairs within the approved scope.
-9. Re-run verification after changes.
-10. Persist a checkpoint and continue until acceptance criteria pass or a real blocker is reached.
+Proposals are limited to 100 KB and 50 declared paths. Standard diff headers must match the declared paths exactly; traversal, absolute paths, duplicate paths, `.git` and `node_modules` are rejected. Approval binds only to the stored patch hash and base context. It is not an apply token: no repository write, command execution or sandbox capability is currently exposed. A real executor must re-check the branch head and patch hash at apply time and use a separate isolated runtime.
 
-The loop must not run indefinitely. It needs configurable time, token, tool-call, retry, and compute budgets; cancellation; idempotency; and explicit stop conditions. On budget exhaustion, preserve a resumable checkpoint.
+## Execution loop still required
+
+The current state machine does **not** execute commands or edit repositories. Future execution work must add:
+1. Re-read task goal, criteria, state and latest checkpoint.
+2. Select a bounded next action and check tool permissions.
+3. Obtain task-scoped approval for consequential actions.
+4. Execute in an isolated workspace with resource limits.
+5. Capture outputs, diffs, exit codes and redacted logs.
+6. Run checks, diagnose failures and make bounded repairs.
+7. Re-verify after changes and checkpoint progress.
+8. Stop on acceptance, a real blocker, cancellation or exhausted budget.
+
+The loop needs configurable time, tool-call, retry and compute budgets, idempotency, cancellation and resumability.
 
 ## Approval boundaries
 
-Approval is bound to a concrete action or diff and its scope. Material changes invalidate the affected approval. Require separate approval for consequential external side effects such as publishing, production deployment, destructive data changes, permission expansion, or paid resource creation. Never treat generated model text as approval.
+Approval is bound to a concrete action or diff and its scope. Material changes invalidate affected approval. Publishing, production deployment, destructive data changes, permission expansion and paid resource creation require separate explicit approval. Generated model text is never approval.
 
 ## Verification standard
 
 - Distinguish planned checks from executed checks.
-- Record exact command/tool, environment, timestamp, exit status, and relevant output.
-- Tests, build, static analysis, and end-to-end behaviour are separate claims.
+- Record exact tool/check, environment, timestamp, exit status and relevant output.
+- Tests, build, static analysis and end-to-end behaviour are separate claims.
 - Do not report success unless fresh evidence proves the specific claim.
 - If the environment cannot run a check, report it as unverified.
 
 ## Memory model
 
-Use Mnemosyne-Protocol as a source of design ideas, not as an assumed runtime dependency.
-
-Early memory should prioritise durable, typed, provenance-bearing records:
+Project memory remains typed and provenance-bearing:
 - Project facts and architecture observations.
 - User-approved decisions and constraints.
-- Task summaries, checkpoints, and outcomes.
+- Task summaries, checkpoints and outcomes.
 - Known issues and verification evidence.
-- Skill and tool usage metadata where useful.
 
-Each record needs identity, scope, source/provenance, creation/update time, lifecycle, confidence or evidence class, and links to the relevant project/task/repository revision.
-
-## Memory safety
-
-- Memory is data, never policy or permission.
-- Keep project, task, and user scopes separate.
-- Enforce tenant and project boundaries in every read/write/query path.
-- Preserve links to original evidence; do not promote inferred statements into facts during consolidation.
-- Detect stale or conflicting memories and surface them rather than silently overwriting.
-- Apply context budgets and retrieve narrowly by task relevance.
-- Do not add vector/graph infrastructure until measured retrieval needs justify it.
+Memory is data, never policy or permission. Tenant and project boundaries are enforced on read/write paths. Inferred statements must not silently become facts.

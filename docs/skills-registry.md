@@ -1,68 +1,39 @@
 # Agent Skills Registry
 
-Status: required product capability; implementation contracts to be finalised before coding.
+Status: **first persistent registry foundation implemented**. External discovery and executable skill loading remain future work.
 
-## Purpose
+## Implemented operations
 
-Provide a first-class registry for reusable agent skills. A skill is a versioned capability package containing instructions, references, templates, and optionally declared tool requirements. Installing a skill must not grant it unrestricted authority.
+- `validate_skill_package`: validate flat YAML frontmatter, semantic version, description, dependency names and permission scopes; calculate SHA-256.
+- `install_skill`: persist the SKILL.md content, manifest, version, hash, requested permissions and declared provenance.
+- `list_skills`, `inspect_skill`, `read_skill_instructions`: inspect registry metadata and stored instructions.
+- `record_skill_permission_decisions`: record explicit approved/rejected decisions for requested scopes.
+- `enable_skill`, `disable_skill`, `archive_skill`: control registry availability and preserve an audit trail.
 
-## User capabilities
-
-- Discover available built-in, user-provided, and trusted external skills.
-- Inspect a skill's complete manifest, instructions, references, provenance, version, and declared capabilities before installation.
-- Install from an approved source or local/package upload.
-- Validate structure, references, manifest fields, and declared dependencies.
-- Enable, disable, update, pin a version, uninstall, and inspect history.
-- Expose selected skills to the agent for relevant tasks.
-- See which skills were selected for a task and why.
-
-## Skill package contract
-
-A skill package should declare:
-- Stable name and semantic version.
-- Human-readable purpose and invocation conditions.
-- Source/provenance and integrity metadata.
-- Required tools/capabilities, if any.
-- Compatible agent/runtime version.
-- Entry instructions and contained references/assets.
-- Optional dependencies and validation status.
+All records are tenant-scoped. Versions are immutable by name/version/hash: a different payload under an existing version is rejected.
 
 ## Trust and permission model
 
-- Skill text is untrusted guidance, never system policy or authorisation.
-- Installing a skill does not automatically enable it.
-- Enabling a skill does not automatically grant its requested tools.
-- Each tool capability is granted separately through the control plane.
-- High-impact actions still require task-scoped approval.
-- Skills cannot alter their own permission grants or suppress audit records.
-- Unknown or third-party sources are labelled untrusted until reviewed.
-- Pin versions for reproducibility; updates are explicit and reviewable.
-- Disabling a skill prevents future selection; active tasks record the version they already loaded.
+- Installation always leaves a skill in the `installed` state.
+- Installing a skill does not enable it.
+- Requested permissions begin as `pending`.
+- A skill cannot be enabled while any requested permission is pending or rejected.
+- Registry approval is not itself a runtime capability grant.
+- Enabling a skill does not execute code or scripts.
+- Archive is a soft uninstall: versions, content, hashes and audit history remain stored.
+- Provenance fields are recorded as supplied; publisher authenticity is not yet verified.
+- Skill instructions are untrusted data and cannot override host or user policy.
 
-## Registry operations
+## Package contract and current limits
 
-Initial MCP-facing operations to consider:
-- list_skills
-- inspect_skill
-- install_skill
-- enable_skill
-- disable_skill
-- update_skill
-- uninstall_skill
-- list_skill_sources
-- validate_skill
+A package currently consists of one bounded `SKILL.md` file with flat frontmatter containing `name`, `version` and `description`. Dependencies and requested permission scopes are supplied as separate structured inputs.
 
-Mutating registry operations require authenticated ownership and explicit confirmation where appropriate. Tool schemas and exact approval rules are part of the next implementation design.
+Not yet implemented:
+- External skill catalogs and trusted publisher verification.
+- Multi-file archives, reference assets and path traversal checks for archive extraction.
+- Dependency resolution and compatibility checks against runtime versions.
+- Version pinning/rollback UI and skill selection telemetry.
+- Loading skills into a live agent execution context.
+- Runtime capability grants and isolation.
 
-## Exposure and selection
-
-The agent may select enabled skills based on task intent, repository context, and declared compatibility. It should load only relevant instructions and references, show the selected skill set in task evidence, and explain conflicts. A skill may suggest a workflow but cannot override host policy, user approval, or deterministic authorization.
-
-## Security checks
-
-- Validate archive paths and reject traversal, symlinks escaping the package, oversized files, and malformed manifests.
-- Keep package contents isolated from secrets and runtime credentials.
-- Treat skill instructions and reference documents as prompt-injection-capable content.
-- Validate declared tools against a central capability registry.
-- Record install/update/enable/disable/uninstall events.
-- Provide a safe disable/revoke path.
+The registry deliberately separates metadata installation, permission decisions, enablement and execution.

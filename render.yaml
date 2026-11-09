@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: engineering-agent-mcp
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: feat/remote-mcp-neon-runtime
+    buildCommand: pnpm install --no-frozen-lockfile && pnpm --filter @engineering-agent/mcp-server build
+    startCommand: pnpm --filter @engineering-agent/mcp-server start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: MCP_BEARER_TOKEN
+        sync: false
+      - key: AGENT_TENANT_ID
+        value: primary
+      - key: PUBLIC_HOST
+        value: engineering-agent-mcp.onrender.com
