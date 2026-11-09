@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const API = "https://api.github.com";
 const WORKFLOW = "omen-execution.yml";
+const DEFAULT_WORKFLOW_REF = "main";
 const PREFIX = "omen.execution.v1:";
 
 type RunRecord = {
@@ -96,10 +97,17 @@ export function registerExecutionTools(server: McpServer, pool: Pool, tenantId: 
       }
       const requestId = randomUUID();
       const dispatchedAt = new Date().toISOString();
+
+      // workflow_dispatch must target the branch that contains the workflow file.
+      // The requested code revision is a separate workflow input consumed by checkout.
       await githubRequest(token, "/repos/" + repository + "/actions/workflows/" + WORKFLOW + "/dispatches", {
         method: "POST",
-        body: JSON.stringify({ ref, inputs: { task_id } })
+        body: JSON.stringify({
+          ref: DEFAULT_WORKFLOW_REF,
+          inputs: { task_id, ref }
+        })
       });
+
       const record: RunRecord = {
         kind: "github_actions_execution",
         task_id,
@@ -120,6 +128,7 @@ export function registerExecutionTools(server: McpServer, pool: Pool, tenantId: 
         repository,
         ref,
         workflow: WORKFLOW,
+        workflow_ref: DEFAULT_WORKFLOW_REF,
         request_id: requestId,
         dispatched_at: dispatchedAt,
         note: "GitHub accepted the workflow dispatch request. Query get_engineering_execution for the run ID and final evidence."
