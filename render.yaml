@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    branch: feat/remote-mcp-neon-runtime
+    branch: main
     buildCommand: pnpm install --no-frozen-lockfile && pnpm --filter @engineering-agent/mcp-server build
     startCommand: pnpm --filter @engineering-agent/mcp-server start
     healthCheckPath: /health
